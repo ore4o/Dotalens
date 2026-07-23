@@ -6,6 +6,7 @@ const path = require("node:path");
 const APP_SCHEME = "dotalens";
 const APP_URL = `${APP_SCHEME}://app/`;
 const API_STATUS_URL = "http://127.0.0.1:5600/api/status";
+const javaExecutable = process.platform === "win32" ? "java.exe" : "java";
 const qaCapturePath = process.env.DOTA_LENS_QA_CAPTURE ? path.resolve(process.env.DOTA_LENS_QA_CAPTURE) : null;
 const qaViews = new Set(["development", "farm", "vision", "combat", "players", "goldens", "settings"]);
 const qaView = qaViews.has(process.env.DOTA_LENS_QA_VIEW) ? process.env.DOTA_LENS_QA_VIEW : "farm";
@@ -17,7 +18,8 @@ const qaGoldenTimeMs = Number.parseInt(process.env.DOTA_LENS_QA_GOLDEN_TIME_MS |
 const qaAddGoldenEvent = process.env.DOTA_LENS_QA_ADD_GOLDEN_EVENT === "1";
 const qaScoreboardStress = process.env.DOTA_LENS_QA_SCOREBOARD_STRESS === "1";
 const qaDirectoryPickers = process.env.DOTA_LENS_QA_DIRECTORY_PICKERS === "1";
-const qaDirectoryRoot = process.env.DOTA_LENS_QA_DIRECTORY_ROOT || "C:\\Dota Lens QA";
+const qaDirectoryRoot = process.env.DOTA_LENS_QA_DIRECTORY_ROOT
+  || (process.platform === "win32" ? "C:\\Dota Lens QA" : path.join(app.getPath("temp"), "Dota Lens QA"));
 const qaSettingsPanel = new Set(["account", "dota", "parser", "data", "display", "diagnostics"]).has(process.env.DOTA_LENS_QA_SETTINGS_PANEL)
   ? process.env.DOTA_LENS_QA_SETTINGS_PANEL
   : "dota";
@@ -51,13 +53,14 @@ function projectPath(...parts) {
 function runtimePaths() {
   if (app.isPackaged) {
     return {
-      java: path.join(process.resourcesPath, "jre", "bin", "java.exe"),
+      java: path.join(process.resourcesPath, "jre", "bin", javaExecutable),
       jar: path.join(process.resourcesPath, "parser", "stats-0.1.0.jar"),
       data: path.join(app.getPath("userData"), "data"),
     };
   }
+  const javaHome = process.env.DOTA_LENS_JAVA_HOME || projectPath("tools", "runtime", "jdk-21");
   return {
-    java: projectPath("tools", "runtime", "jdk-21", "bin", "java.exe"),
+    java: path.join(javaHome, "bin", javaExecutable),
     jar: projectPath("tools", "replay-parser", "target", "stats-0.1.0.jar"),
     data: projectPath("tools", "runtime", "dota-lens-data"),
   };
@@ -139,7 +142,13 @@ async function ensureParser() {
 
   parserProcess = spawn(paths.java, ["-Djava.net.preferIPv4Stack=true", "-Xmx2g", "-jar", paths.jar], {
     cwd: path.dirname(paths.jar),
-    env: { ...process.env, DOTA_LENS_DATA_DIR: paths.data },
+    env: {
+      ...process.env,
+      DOTA_LENS_DATA_DIR: paths.data,
+      // macOS does not provide a `python` alias by default; the parser will
+      // fall back to Java decompression if Python is unavailable.
+      DOTA_LENS_PYTHON: process.env.DOTA_LENS_PYTHON || (process.platform === "win32" ? "python" : "python3"),
+    },
     windowsHide: true,
     stdio: ["ignore", stdout, stderr],
   });
