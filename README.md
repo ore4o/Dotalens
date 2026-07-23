@@ -1,11 +1,16 @@
 # Dota Lens
 
+> 本仓库 Fork 自原作者 [Kerry-yangg](https://github.com/Kerry-yangg) 的 [Dota Lens](https://github.com/Kerry-yangg/Dotalens)。
+> 上游原工程地址：https://github.com/Kerry-yangg/Dotalens
+
 Dota Lens 是一款面向 Dota 2 玩家个人复盘的 Windows 与 macOS 桌面客户端。输入 Steam 32 位数字
 ID 后，可读取最近比赛、获取 Replay，并在本机完成逐秒解析和多模块分析。
 
 > 当前版本：`0.4.1` 预览版。分析结论用于辅助复盘，不应视为绝对的游戏判断。
 
 [下载 v0.4.1 Windows 安装程序](https://github.com/Kerry-yangg/Dotalens/releases/tag/v0.4.1)
+
+macOS Apple Silicon（M1/M2/M3/M4）：[下载 DMG 安装包](https://github.com/ore4o/Dotalens/releases/download/v0.4.1-macos.1/Dota-Lens-0.4.1-mac-arm64.dmg) ｜ [下载 ZIP 应用包](https://github.com/ore4o/Dotalens/releases/download/v0.4.1-macos.1/Dota-Lens-0.4.1-mac-arm64.zip)
 
 ## 主要功能
 
