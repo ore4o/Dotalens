@@ -20,10 +20,18 @@
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
     "desktop:dev": "npm run build && electron .",
-    "desktop:dir": "npm run build && electron-builder --win --x64 --dir",
-    "desktop:dist": "npm run build && electron-builder --win nsis --x64",
-    "desktop:portable": "npm run build && electron-builder --win portable --x64",
-    "runtime:build": "pwsh -NoProfile -File ./tools/Build-DotaLensRuntime.ps1"
+    "desktop:dir": "npm run desktop:dir:win",
+    "desktop:dist": "npm run desktop:dist:win",
+    "desktop:portable": "npm run desktop:portable:win",
+    "desktop:dir:win": "npm run build && electron-builder --win --x64 --dir",
+    "desktop:dist:win": "npm run build && electron-builder --win nsis --x64",
+    "desktop:portable:win": "npm run build && electron-builder --win portable --x64",
+    "desktop:dir:mac": "npm run build && electron-builder --mac --dir",
+    "desktop:dist:mac": "npm run build && electron-builder --mac dmg zip",
+    "parser:build:mac": "bash ./tools/Build-DotaLensParser.sh",
+    "runtime:build": "pwsh -NoProfile -File ./tools/Build-DotaLensRuntime.ps1",
+    "runtime:build:mac": "bash ./tools/Build-DotaLensRuntime.sh",
+    "desktop:dev:mac": "npm run build && electron ."
   },
   "dependencies": {
     "echarts": "latest",
@@ -67,6 +75,14 @@
           ]
         }
       ]
+    },
+    "mac": {
+      "category": "public.app-category.games",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "artifactName": "Dota-Lens-${version}-mac-${arch}.${ext}"
     },
     "nsis": {
       "oneClick": false,

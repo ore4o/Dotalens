@@ -1,6 +1,6 @@
 # Dota Lens
 
-Dota Lens 是一款面向 Dota 2 玩家个人复盘的 Windows 桌面客户端。输入 Steam 32 位数字
+Dota Lens 是一款面向 Dota 2 玩家个人复盘的 Windows 与 macOS 桌面客户端。输入 Steam 32 位数字
 ID 后，可读取最近比赛、获取 Replay，并在本机完成逐秒解析和多模块分析。
 
 > 当前版本：`0.4.1` 预览版。分析结论用于辅助复盘，不应视为绝对的游戏判断。
@@ -18,7 +18,7 @@ ID 后，可读取最近比赛、获取 Replay，并在本机完成逐秒解析�
 
 ## 安装使用
 
-支持 Windows 10/11 x64。普通用户无需单独安装 Node.js、Java 或 Maven。
+Windows 10/11 x64 已提供安装程序。macOS 版可从源码在 Intel 或 Apple Silicon Mac 上构建；首次构建需要 JDK 21、Maven 3.9+ 和 Node.js 22.12+。
 
 1. 在 [Releases](https://github.com/Kerry-yangg/Dotalens/releases) 下载
    `Dota-Lens-Setup-0.4.1-x64.exe`。
@@ -39,12 +39,31 @@ Release 页面下载，并核对 Release 中公布的 SHA-256。
 
 首次启动不会预填任何账号。账号只在用户完成查询后保存到本机 `localStorage`。
 
+### macOS 构建与运行
+
+在 macOS 上安装 JDK 21（必须包含 `jlink`）、Maven 3.9+ 和 Node.js 22.12+ 后：
+
+```bash
+npm ci
+npm run parser:build:mac
+npm run runtime:build:mac
+npm run desktop:dist:mac
+```
+
+产物位于 `release/`，包含 `.dmg` 与 `.zip`。macOS 未签名构建首次打开可能被 Gatekeeper 拦截；应仅运行自行构建或可信来源的包。开发运行可使用：
+
+```bash
+./tools/Start-DotaLens.sh
+```
+
+如 JDK 21 未被系统自动发现，运行前设置 `DOTA_LENS_JAVA_HOME` 为 JDK 根目录。
+
 ## 当前限制
 
 - 最近比赛列表及 Replay 元数据依赖 OpenDota；没有可用 Replay 的比赛无法进行完整逐秒复盘。
 - 不同 Dota 2 Patch 的 Replay 字段会变化，地图校准和派生结论需要持续回归验证。
 - 连续真实队伍视野、完整逐波兵线和营地状态在部分 Replay 中不可得，产品会显示证据缺口。
-- 当前只构建和验证 Windows x64 安装程序，尚未提供 macOS 或 Linux 桌面包。
+- macOS 构建需要在目标架构的 Mac 上完成，才能把匹配架构的精简 Java 运行时打入应用；当前未提供签名和公证。
 - `0.4.1` 仍使用 Electron 默认程序图标，后续版本会补充独立品牌图标与代码签名。
 
 ## 本地开发
