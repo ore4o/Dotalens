@@ -1,0 +1,72 @@
+{
+  "project": "Dota Lens 0.4.2 Update",
+  "format": "1080x1920",
+  "output_basename": "Dota-Lens-0.4.2-Douyin",
+  "cover": {
+    "lines": ["DOTA LENS 已更新", "玩家报告 + 眼位地图"],
+    "subtitle": "约 30 秒看懂这次更新"
+  },
+  "scenes": [
+    {
+      "id": "01_update",
+      "label": "DOTA LENS 0.4.2",
+      "title": "DOTA LENS\n已更新",
+      "narration": "Dota Lens 已更新！重点是玩家报告和眼位地图。",
+      "captions": ["比赛简报 + 深度分析", "眼位地图支持放大"],
+      "image": "promo/assets/player-score.png",
+      "focus": [1260, 690],
+      "zoom": 1.20,
+      "callout": [620, 425, 2010, 1020],
+      "accent": "green"
+    },
+    {
+      "id": "02_brief",
+      "label": "比赛简报",
+      "title": "普通玩家\n先看比赛简报",
+      "narration": "比赛简报总结优点、问题和下一场建议，普通玩家一眼看懂。",
+      "captions": ["快速看懂这场打得怎么样", "优点 · 问题 · 下一场建议"],
+      "image": "promo/assets/player-score.png",
+      "focus": [1080, 720],
+      "zoom": 1.32,
+      "callout": [275, 430, 1390, 1110],
+      "accent": "blue"
+    },
+    {
+      "id": "03_deep",
+      "label": "深度分析",
+      "title": "硬核玩家\n展开深度分析",
+      "narration": "深度分析提供分位置评分、阶段表现和原始证据，硬核玩家继续追。",
+      "captions": ["1–5 号位使用不同分析标准", "评分 · 阶段表现 · 原始证据"],
+      "image": "promo/assets/player-score.png",
+      "focus": [1490, 720],
+      "zoom": 1.30,
+      "callout": [980, 400, 2070, 1120],
+      "accent": "amber"
+    },
+    {
+      "id": "04_vision",
+      "label": "眼位地图",
+      "title": "眼位地图\n现在可以放大看",
+      "narration": "眼位地图支持滚轮放大，位置、存活和视野范围看得更清楚。",
+      "captions": ["滚轮缩放后坐标保持准确", "位置 · 存活时间 · 视野范围"],
+      "image": "promo/assets/vision.png",
+      "focus": [1160, 700],
+      "zoom": 1.32,
+      "callout": [310, 385, 1290, 1130],
+      "accent": "blue"
+    },
+    {
+      "id": "05_finish",
+      "label": "完全开源",
+      "title": "完全开源 不要米\n欢迎多提建议",
+      "narration": "Dota Lens 完全开源，不要米。欢迎大家多提建议，一起把它做好。",
+      "captions": ["完全开源 · 不要米", "欢迎大家多提建议"],
+      "image": "promo/assets/player-score.png",
+      "focus": [1260, 690],
+      "zoom": 1.12,
+      "callout": null,
+      "accent": "green",
+      "cta": true
+    }
+  ]
+}
