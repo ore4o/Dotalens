@@ -10,7 +10,7 @@ ID 后，可读取最近比赛、获取 Replay，并在本机完成逐秒解析�
 
 [下载 v0.4.2 Windows 安装程序](https://github.com/Kerry-yangg/Dotalens/releases/tag/v0.4.2)
 
-macOS Apple Silicon（M1/M2/M3/M4）：[下载 DMG 安装包](https://github.com/ore4o/Dotalens/releases/download/v0.4.1-macos.1/Dota-Lens-0.4.1-mac-arm64.dmg) ｜ [下载 ZIP 应用包](https://github.com/ore4o/Dotalens/releases/download/v0.4.1-macos.1/Dota-Lens-0.4.1-mac-arm64.zip)
+macOS Apple Silicon（M1/M2/M3/M4）：[下载 DMG 安装包](https://github.com/ore4o/Dotalens/releases/download/v0.4.2-macos.1/Dota-Lens-0.4.2-mac-arm64.dmg) ｜ [下载 ZIP 应用包](https://github.com/ore4o/Dotalens/releases/download/v0.4.2-macos.1/Dota-Lens-0.4.2-mac-arm64.zip)
 
 ## 主要功能
 
