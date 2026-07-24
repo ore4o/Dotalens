@@ -48,6 +48,7 @@
     "electronDist": "node_modules/electron/dist",
     "asar": true,
     "compression": "normal",
+    "afterPack": "desktop/after-pack.cjs",
     "directories": {
       "output": "release"
     },

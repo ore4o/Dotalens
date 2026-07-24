@@ -55,7 +55,7 @@ npm run runtime:build:mac
 npm run desktop:dist:mac
 ```
 
-产物位于 `release/`，包含 `.dmg` 与 `.zip`。macOS 未签名构建首次打开可能被 Gatekeeper 拦截；应仅运行自行构建或可信来源的包。开发运行可使用：
+产物位于 `release/`，包含 `.dmg` 与 `.zip`。构建会进行临时代码签名以保证应用包完整性，但未使用 Apple Developer ID 签名或公证；首次打开仍可能被 Gatekeeper 拦截。应仅运行自行构建或可信来源的包。开发运行可使用：
 
 ```bash
 ./tools/Start-DotaLens.sh
