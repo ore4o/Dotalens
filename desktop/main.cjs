@@ -2,13 +2,22 @@ const { app, BrowserWindow, Menu, dialog, ipcMain, protocol, session } = require
 const { spawn, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
+const { replayIdentity, scanReplayDirectory } = require("./replay-files.cjs");
+const { createUpdateController } = require("./updater.cjs");
 
 const APP_SCHEME = "dotalens";
 const APP_URL = `${APP_SCHEME}://app/`;
 const API_STATUS_URL = "http://127.0.0.1:5600/api/status";
 const javaExecutable = process.platform === "win32" ? "java.exe" : "java";
 const API_SHUTDOWN_URL = "http://127.0.0.1:5600/api/shutdown";
-const PARSER_API_VERSION = "1.5.2";
+const API_BASE_URL = "http://127.0.0.1:5600/api";
+const PARSER_API_VERSION = "1.7.0";
+const userDataOverride = process.env.DOTA_LENS_USER_DATA_DIR
+  ? path.resolve(process.env.DOTA_LENS_USER_DATA_DIR)
+  : null;
+const parserDataOverride = process.env.DOTA_LENS_DATA_DIR
+  ? path.resolve(process.env.DOTA_LENS_DATA_DIR)
+  : null;
 const qaCapturePath = process.env.DOTA_LENS_QA_CAPTURE ? path.resolve(process.env.DOTA_LENS_QA_CAPTURE) : null;
 const qaViews = new Set([
   "matches", "replays", "tasks", "settings",
@@ -22,21 +31,35 @@ const qaScoreboardStress = process.env.DOTA_LENS_QA_SCOREBOARD_STRESS === "1";
 const qaDirectoryPickers = process.env.DOTA_LENS_QA_DIRECTORY_PICKERS === "1";
 const qaDirectoryRoot = process.env.DOTA_LENS_QA_DIRECTORY_ROOT
   || (process.platform === "win32" ? "C:\\Dota Lens QA" : path.join(app.getPath("temp"), "Dota Lens QA"));
-const qaSettingsPanel = new Set(["account", "dota", "parser", "data", "display", "diagnostics"]).has(process.env.DOTA_LENS_QA_SETTINGS_PANEL)
+const qaSettingsPanel = new Set(["account", "display", "dota", "parser", "updates", "diagnostics"]).has(process.env.DOTA_LENS_QA_SETTINGS_PANEL)
   ? process.env.DOTA_LENS_QA_SETTINGS_PANEL
   : "dota";
+const qaReadingMode = new Set(["simple", "professional"]).has(process.env.DOTA_LENS_QA_READING_MODE)
+  ? process.env.DOTA_LENS_QA_READING_MODE
+  : null;
+const qaUpdateState = /^[a-z_]+$/.test(process.env.DOTA_LENS_QA_UPDATE_STATE || "")
+  ? process.env.DOTA_LENS_QA_UPDATE_STATE
+  : null;
+
+if (userDataOverride) {
+  app.setPath("userData", userDataOverride);
+}
 
 if (qaCapturePath) {
   app.disableHardwareAcceleration();
   app.commandLine.appendSwitch("disable-gpu");
   app.commandLine.appendSwitch("disable-gpu-sandbox");
   app.commandLine.appendSwitch("in-process-gpu");
-  app.setPath("userData", path.join(process.env.TEMP || __dirname, `dota-lens-electron-qa-${process.pid}`));
+  if (!userDataOverride) {
+    app.setPath("userData", path.join(process.env.TEMP || __dirname, `dota-lens-electron-qa-${process.pid}`));
+  }
 }
 
 let mainWindow = null;
 let parserProcess = null;
 let ownsParser = false;
+let updateController = null;
+const approvedReplayFiles = new Set();
 
 protocol.registerSchemesAsPrivileged([{
   scheme: APP_SCHEME,
@@ -57,14 +80,14 @@ function runtimePaths() {
     return {
       java: path.join(process.resourcesPath, "jre", "bin", javaExecutable),
       jar: path.join(process.resourcesPath, "parser", "stats-0.1.0.jar"),
-      data: path.join(app.getPath("userData"), "data"),
+      data: parserDataOverride || path.join(app.getPath("userData"), "data"),
     };
   }
   const javaHome = process.env.DOTA_LENS_JAVA_HOME || projectPath("tools", "runtime", "jdk-21");
   return {
     java: path.join(javaHome, "bin", javaExecutable),
     jar: projectPath("tools", "replay-parser", "target", "stats-0.1.0.jar"),
-    data: projectPath("tools", "runtime", "dota-lens-data"),
+    data: parserDataOverride || projectPath("tools", "runtime", "dota-lens-data"),
   };
 }
 
@@ -136,6 +159,88 @@ function registerIpcHandlers() {
       filePath: result.filePaths[0] || null,
       source: "dialog",
     };
+  });
+
+  ipcMain.handle("dota-lens:scan-replay-directory", async (event, request = {}) => {
+    if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) {
+      throw new Error("Replay 扫描请求来自未知窗口");
+    }
+    const results = scanReplayDirectory(request.directory);
+    approvedReplayFiles.clear();
+    results.forEach((replay) => approvedReplayFiles.add(path.resolve(replay.filePath)));
+    return results;
+  });
+
+  ipcMain.handle("dota-lens:import-replay-path", async (event, request = {}) => {
+    if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) {
+      throw new Error("Replay 导入请求来自未知窗口");
+    }
+    const filePath = path.resolve(String(request.filePath || ""));
+    if (!approvedReplayFiles.has(filePath)) {
+      throw new Error("请先扫描 Replay 目录，再导入该文件");
+    }
+    const identity = replayIdentity(path.basename(filePath));
+    if (!identity || identity.matchId !== String(request.matchId || "")) {
+      throw new Error("Replay 文件名与比赛 ID 不一致");
+    }
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile() || stat.size <= 0) throw new Error("Replay 文件为空或不可读取");
+
+    const accountId = /^\d{1,10}$/.test(String(request.accountId || ""))
+      ? String(request.accountId)
+      : "";
+    const response = await fetch(`${API_BASE_URL}/replays/${identity.matchId}/import`, {
+      method: "POST",
+      body: fs.createReadStream(filePath),
+      duplex: "half",
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "Content-Length": String(stat.size),
+        "X-Dota-Lens-File-Name": path.basename(filePath),
+        "X-Dota-Lens-Account-Id": accountId,
+      },
+    });
+    const text = await response.text();
+    let payload = {};
+    try {
+      payload = text ? JSON.parse(text) : {};
+    } catch {
+      throw new Error(`本地解析器返回了无效响应（HTTP ${response.status}）`);
+    }
+    if (!response.ok) {
+      const error = new Error(payload.message || `本地解析器返回 HTTP ${response.status}`);
+      error.code = payload.error || "invalid_replay_file";
+      throw error;
+    }
+    return payload;
+  });
+
+  ipcMain.handle("dota-lens:update:get-state", (event) => {
+    if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) {
+      throw new Error("更新状态请求来自未知窗口");
+    }
+    return updateController?.getState() || null;
+  });
+
+  ipcMain.handle("dota-lens:update:check", async (event) => {
+    if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) {
+      throw new Error("检查更新请求来自未知窗口");
+    }
+    return updateController?.check() || { ok: false, reason: "unsupported" };
+  });
+
+  ipcMain.handle("dota-lens:update:download", async (event) => {
+    if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) {
+      throw new Error("下载更新请求来自未知窗口");
+    }
+    return updateController?.download() || { ok: false, reason: "unsupported" };
+  });
+
+  ipcMain.handle("dota-lens:update:install", async (event) => {
+    if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) {
+      throw new Error("安装更新请求来自未知窗口");
+    }
+    return updateController?.install() || { ok: false, reason: "unsupported" };
   });
 }
 
@@ -311,6 +416,16 @@ function createWindow() {
         if (ready) break;
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
+      const contentReadyExpression = {
+        "player-score": "Boolean(document.querySelector('.player-score-simple-report, .player-score-overview')) && !document.querySelector('.player-score-module-loading')",
+        combat: "Boolean(document.querySelector('#combat-contribution-chart canvas')) && Boolean(document.querySelector('#combat-responsibility-radar canvas, #combat-responsibility-radar.empty'))",
+      }[qaView];
+      if (contentReadyExpression) {
+        for (let attempt = 0; attempt < 200; attempt += 1) {
+          if (await mainWindow.webContents.executeJavaScript(contentReadyExpression)) break;
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      }
       if (qaView === "settings" && qaDirectoryPickers) {
         await mainWindow.webContents.executeJavaScript(`(async () => {
           for (const button of document.querySelectorAll('[data-directory-picker]')) {
@@ -338,11 +453,13 @@ function createWindow() {
       await new Promise((resolve) => setTimeout(resolve, 250));
       const metrics = await mainWindow.webContents.executeJavaScript(`(() => {
         const selectors = [
+          '#match-subject-dialog',
           '#detail-farm', '.farm-main-layout', '.farm-map-panel', '.farm-map-canvas', '.farm-diagnosis-panel',
           '#detail-development', '.development-layout', '.lane-review',
           '#detail-vision', '.ward-main-layout', '.ward-map-panel', '.ward-browser-panel', '.ward-inspector-panel',
           '#detail-combat', '.combat-layout', '.combat-map-panel', '.combat-map-canvas',
           '.combat-vision-panel', '.combat-contribution-panel', '.combat-inspector-panel',
+          '#detail-player-score',
           '#detail-players', '.scoreboard', '.scoreboard-table-scroll', '.scoreboard-table-head', '.scoreboard-row',
           '#page-settings', '.settings-layout', '.settings-content', '#settings-dota', '#settings-parser',
           '#settings-dota-path', '#settings-replay-path', '#settings-temp-path'
@@ -400,6 +517,8 @@ function createWindow() {
     }
     mainWindow.show();
     mainWindow.focus();
+    publishUpdateState(updateController?.getState());
+    updateController?.scheduleInitialCheck(15000);
     console.error(`[desktop] frontend loaded, visible=${mainWindow.isVisible()}`);
   });
   mainWindow.webContents.on("did-fail-load", (_event, code, description, url) => {
@@ -410,7 +529,7 @@ function createWindow() {
   });
   mainWindow.on("closed", () => { mainWindow = null; });
   const frontendUrl = qaCapturePath
-    ? `${APP_URL}?preview=${qaView}${qaMatchId ? `&qaMatch=${qaMatchId}` : ""}${qaScoreboardStress ? "&scoreboardStress=1" : ""}${qaView === "settings" ? `&settingsPanel=${qaSettingsPanel}` : ""}`
+    ? `${APP_URL}?preview=${qaView}${qaMatchId ? `&qaMatch=${qaMatchId}` : ""}${qaScoreboardStress ? "&scoreboardStress=1" : ""}${qaView === "settings" ? `&settingsPanel=${qaSettingsPanel}` : ""}${qaReadingMode ? `&readingMode=${qaReadingMode}` : ""}${qaUpdateState ? `&updateState=${qaUpdateState}` : ""}`
     : APP_URL;
   mainWindow.loadURL(frontendUrl).catch((error) => {
     console.error(`Failed to load ${APP_URL}`, error);
@@ -421,6 +540,43 @@ function stopOwnedParser() {
   if (ownsParser && parserProcess && !parserProcess.killed) parserProcess.kill();
   parserProcess = null;
   ownsParser = false;
+}
+
+function desktopDistribution() {
+  if (!app.isPackaged) return "development";
+  if (process.platform === "darwin") return "mac";
+  if (process.env.PORTABLE_EXECUTABLE_FILE || process.env.PORTABLE_EXECUTABLE_DIR) return "portable";
+  return "nsis";
+}
+
+function publishUpdateState(state) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send("dota-lens:update-state", state);
+}
+
+function initializeUpdateController() {
+  const distribution = desktopDistribution();
+  let nativeUpdater = null;
+  if (app.isPackaged && distribution === "nsis") {
+    try {
+      ({ autoUpdater: nativeUpdater } = require("electron-updater"));
+      nativeUpdater.autoDownload = false;
+      nativeUpdater.autoInstallOnAppQuit = false;
+      nativeUpdater.allowPrerelease = false;
+      nativeUpdater.logger = console;
+    } catch (error) {
+      console.error("[desktop] updater unavailable", error);
+    }
+  }
+  updateController = createUpdateController({
+    updater: nativeUpdater,
+    currentVersion: app.getVersion(),
+    isPackaged: app.isPackaged,
+    distribution,
+    publishState: publishUpdateState,
+    isParserBusy: async () => Number((await parserStatus())?.active_jobs || 0) > 0,
+    stopParser: async () => stopOwnedParser(),
+  });
 }
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -435,9 +591,11 @@ if (!hasSingleInstanceLock) {
 
   app.whenReady().then(async () => {
     console.error("[desktop] Electron ready");
+    if (process.platform === "win32") app.setAppUserModelId("com.dotalens.desktop");
     Menu.setApplicationMenu(null);
     session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
     installAppProtocol();
+    initializeUpdateController();
     registerIpcHandlers();
     try {
       if (!qaCapturePath) await ensureParser();

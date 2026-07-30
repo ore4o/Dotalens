@@ -8,10 +8,11 @@ import java.util.Map;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 
 final class PlayerReportAnalysis {
-    static final String SCHEMA = "player-report/3.0";
+    static final String SCHEMA = PlayerReportScoringV4.SCHEMA;
 
     private PlayerReportAnalysis() {
     }
@@ -34,11 +35,11 @@ final class PlayerReportAnalysis {
             JsonObject opponent = object(bySlot, Integer.toString(counterpart));
             JsonObject roleOpponent = object(bySlot, Integer.toString(roleCounterpart));
             BaseScores base = baseScores(modules, facts, opponent, roleOpponent, bySlot,
-                    slot, position, duration);
+                    slot, roleCounterpart, position, duration);
             Profile profile = profile(position);
 
             List<DimensionResult> dimensions = new ArrayList<>();
-            int weightedScore = 0;
+            double weightedScore = 0;
             int availableWeight = 0;
             int weightedConfidence = 0;
             for (DimensionSpec spec : profile.dimensions) {
@@ -59,11 +60,12 @@ final class PlayerReportAnalysis {
                     .filter(item -> item.score.available).count();
             List<DimensionResult> rankedDimensions = dimensions.stream()
                     .filter(item -> item.score.available)
-                    .sorted(Comparator.comparingInt((DimensionResult item) -> item.score.score).reversed())
+                    .sorted(Comparator.comparingDouble((DimensionResult item) -> item.score.score).reversed())
                     .toList();
 
             JsonObject report = new JsonObject();
             report.addProperty("model", SCHEMA);
+            report.addProperty("base_component_model", PlayerReportBaseComponents.MODEL);
             report.addProperty("scope", "single_match_relative");
             report.addProperty("slot", slot);
             report.addProperty("position", position);
@@ -107,6 +109,8 @@ final class PlayerReportAnalysis {
                 JsonArray missing = new JsonArray();
                 result.score.missing.forEach(missing::add);
                 row.add("missing", missing);
+                row.add("base_components",
+                        PlayerReportBaseComponents.toJson(result.score.baseCalculation));
                 row.add("evidence", evidence(result.source, modules, facts, opponent,
                         roleOpponent, bySlot, slot, position, duration));
                 dimensionRows.add(row);
@@ -120,15 +124,24 @@ final class PlayerReportAnalysis {
             report.add("strengths", strengths);
             JsonArray improvements = new JsonArray();
             rankedDimensions.stream()
-                    .sorted(Comparator.comparingInt(item -> item.score.score)).limit(2)
+                    .sorted(Comparator.comparingDouble(item -> item.score.score)).limit(2)
                     .forEach(item -> improvements.add(item.key));
             report.add("improvements", improvements);
+            JsonObject combatTiming = PlayerCombatTimingAnalysis.analyze(
+                    modules,
+                    slot,
+                    position,
+                    intValue(facts, "role_confidence", 0),
+                    duration);
+            report.add("combat_timing", combatTiming);
             PlayerReportNarrativeV3.enrich(modules, report, facts, slot, position, counterpart,
                     reportConfidence, overall, dimensionRows, phaseScores);
+            PlayerReportScoringV4.apply(report);
             facts.add("report", report);
         }
 
         playerModule.addProperty("schema", SCHEMA);
+        playerModule.addProperty("base_component_model", PlayerReportBaseComponents.MODEL);
         playerModule.add("role_profiles", roleProfiles());
         JsonArray caveats = new JsonArray();
         caveats.add("no_cross_match_percentile");
@@ -182,7 +195,8 @@ final class PlayerReportAnalysis {
     }
 
     private static BaseScores baseScores(JsonObject modules, JsonObject own, JsonObject opponent,
-            JsonObject roleOpponent, JsonObject bySlot, int slot, int position, int duration) {
+            JsonObject roleOpponent, JsonObject bySlot, int slot, int roleCounterpart,
+            int position, int duration) {
         int teamStart = slot < 5 ? 0 : 5;
         double teamDamage = teamTotal(bySlot, teamStart, "hero_damage", "damage_dealt");
         double teamTaken = teamTotal(bySlot, teamStart, "damage_taken", null);
@@ -200,86 +214,141 @@ final class PlayerReportAnalysis {
                 : clamp((int) Math.round(securedUnits * 100.0 / (securedUnits + reviewableMisses)), 0, 100);
         JsonObject supportRoute = supportRoute(modules, slot);
         boolean laneOpportunityEnabled = booleanValue(laneOpportunity, "recommendation_enabled", false);
-        int lane = laneModelScore;
         List<String> laneMissing = new ArrayList<>();
+        List<PlayerReportBaseComponents.ComponentInput> laneInputs = new ArrayList<>();
+        double laneModelWeight = position <= 3 ? 75 : 65;
+        laneInputs.add(component("lane_model_score", "对线模型评分", laneModelScore,
+                laneModelWeight, intValue(own, "lane_confidence", 0),
+                number(own, "lane_score"), 0, "model_points",
+                rawMetrics("lane_score", number(own, "lane_score")),
+                List.of("players:slot:" + slot + ":lane_score")));
         if (position <= 3 && laneOpportunityEnabled && securedUnits + reviewableMisses > 0) {
-            lane = weighted(laneModelScore, 75, opportunityScore, 25);
+            laneInputs.add(component("core_lane_opportunity_conversion", "核心位对线机会转化",
+                    opportunityScore, 25, moduleConfidence(modules, "laning", 72),
+                    securedUnits * 100.0 / (securedUnits + reviewableMisses), 100, "percent",
+                    rawMetrics("secured", securedUnits, "reviewable_misses", reviewableMisses),
+                    List.of("players:slot:" + slot + ":lane_opportunity_summary")));
+        } else if (position <= 3) {
+            laneMissing.add("reviewable_lane_unit_outcomes");
+            laneInputs.add(missingComponent("core_lane_opportunity_conversion", "核心位对线机会转化",
+                    25, moduleConfidence(modules, "laning", 72),
+                    "reviewable_lane_unit_outcomes",
+                    List.of("players:slot:" + slot + ":lane_opportunity_summary")));
         } else if (position >= 4 && supportRoute != null) {
             int supportRouteScore = clamp(50 + (int) Math.round(number(supportRoute, "score") * 1.2), 0, 100);
-            lane = weighted(laneModelScore, 65, supportRouteScore, 35);
+            laneInputs.add(component("support_route_outcome", "辅助路线结果", supportRouteScore,
+                    35, moduleConfidence(modules, "laning", 72), number(supportRoute, "score"),
+                    0, "route_score", rawMetrics("route_score", number(supportRoute, "score")),
+                    List.of("laning:reviews_by_slot:" + slot + ":support_route")));
         } else {
-            laneMissing.add(position <= 3 ? "reviewable_lane_unit_outcomes" : "support_route_outcomes");
+            laneMissing.add("support_route_outcomes");
+            laneInputs.add(missingComponent("support_route_outcome", "辅助路线结果", 35,
+                    moduleConfidence(modules, "laning", 72), "support_route_outcomes",
+                    List.of("laning:reviews_by_slot:" + slot + ":support_route")));
         }
         int laneConfidence = Math.min(intValue(own, "lane_confidence", 0),
                 moduleConfidence(modules, "laning", 72));
-        scores.put("lane", dimension(lane, laneConfidence, "derived", laneMissing));
+        scores.put("lane", dimensionFromComponents(laneInputs, laneConfidence, "derived", laneMissing));
 
-        List<Integer> economyParts = new ArrayList<>();
         List<String> economyMissing = new ArrayList<>();
-        addRelativeMetric(economyParts, economyMissing, own, roleOpponent, "gpm");
-        addRelativeMetric(economyParts, economyMissing, own, roleOpponent, "xpm");
-        addRelativeMetric(economyParts, economyMissing, own, roleOpponent, "networth");
-        int economyConfidence = economyParts.size() < 2 ? 45
-                : Math.min(moduleConfidence(modules, "farm", 78), 60 + economyParts.size() * 8);
-        scores.put("economy", economyParts.size() < 2
-                ? missing(economyConfidence, economyMissing)
-                : dimension(average(economyParts), economyConfidence,
-                        economyMissing.isEmpty() ? "derived" : "partial", economyMissing));
+        List<PlayerReportBaseComponents.ComponentInput> economyInputs = new ArrayList<>();
+        addRelativeComponent(economyInputs, economyMissing, own, roleOpponent, "gpm",
+                "relative_gpm", "每分钟经济相对表现", 33.3333, slot, roleCounterpart);
+        addRelativeComponent(economyInputs, economyMissing, own, roleOpponent, "xpm",
+                "relative_xpm", "每分钟经验相对表现", 33.3333, slot, roleCounterpart);
+        addRelativeComponent(economyInputs, economyMissing, own, roleOpponent, "networth",
+                "relative_net_worth", "净资产相对表现", 33.3334, slot, roleCounterpart);
+        int economyConfidence = Math.min(moduleConfidence(modules, "farm", 78),
+                60 + (int) economyInputs.stream().filter(PlayerReportBaseComponents.ComponentInput::available)
+                        .count() * 8);
+        scores.put("economy", dimensionFromComponents(economyInputs, economyConfidence,
+                economyMissing.isEmpty() ? "derived" : "partial", economyMissing));
 
         ResourceSignals resource = resourceSignals(modules, own, slot);
-        List<Integer> resourceParts = new ArrayList<>();
-        List<Integer> resourceWeights = new ArrayList<>();
         List<String> resourceMissing = new ArrayList<>();
+        List<PlayerReportBaseComponents.ComponentInput> resourceInputs = new ArrayList<>();
         if (position <= 3) {
             if (resource.laneRecommendationEnabled && resource.secured + resource.reviewableMisses > 0) {
-                resourceParts.add(clamp((int) Math.round(resource.secured * 100.0
-                        / (resource.secured + resource.reviewableMisses)), 0, 100));
-                resourceWeights.add(35);
+                int securedScore = clamp((int) Math.round(resource.secured * 100.0
+                        / (resource.secured + resource.reviewableMisses)), 0, 100);
+                resourceInputs.add(component("secured_lane_opportunity_ratio", "已确保对线机会比例",
+                        securedScore, 35, moduleConfidence(modules, "farm", 78),
+                        resource.secured * 100.0 / (resource.secured + resource.reviewableMisses),
+                        100, "percent", rawMetrics("secured", resource.secured,
+                                "reviewable_misses", resource.reviewableMisses),
+                        List.of("players:slot:" + slot + ":lane_opportunity_summary")));
             } else {
                 resourceMissing.add("hard_gated_lane_opportunity_windows");
+                resourceInputs.add(missingComponent("secured_lane_opportunity_ratio",
+                        "已确保对线机会比例", 35, moduleConfidence(modules, "farm", 78),
+                        "hard_gated_lane_opportunity_windows",
+                        List.of("players:slot:" + slot + ":lane_opportunity_summary")));
             }
             if (resource.enabledWindows > 0) {
                 int routeScore = clamp(65 + resource.matchedWindows * 8
                         - resource.missedWindows * 8
                         - Math.min(24, resource.estimatedLoss / 120)
                         + Math.min(8, resource.cycles * 2), 0, 100);
-                resourceParts.add(routeScore);
-                resourceWeights.add(50);
+                resourceInputs.add(component("hard_gated_route_match", "硬门控路线匹配", routeScore,
+                        50, moduleConfidence(modules, "farm", 78), resource.matchedWindows,
+                        resource.enabledWindows, "windows", rawMetrics(
+                                "enabled_windows", resource.enabledWindows,
+                                "matched_windows", resource.matchedWindows,
+                                "missed_windows", resource.missedWindows,
+                                "estimated_loss", resource.estimatedLoss,
+                                "confirmed_cycles", resource.cycles),
+                        List.of("farm:diagnostics_by_slot:" + slot)));
             } else {
                 resourceMissing.add("hard_gated_route_windows");
+                resourceInputs.add(missingComponent("hard_gated_route_match", "硬门控路线匹配",
+                        50, moduleConfidence(modules, "farm", 78), "hard_gated_route_windows",
+                        List.of("farm:diagnostics_by_slot:" + slot)));
             }
             if (resource.cycles > 0) {
-                resourceParts.add(clamp(55 + resource.cycles * 6, 0, 100));
-                resourceWeights.add(15);
+                resourceInputs.add(component("confirmed_lane_jungle_cycles", "确认的线野循环",
+                        clamp(55 + resource.cycles * 6, 0, 100), 15,
+                        moduleConfidence(modules, "farm", 78), resource.cycles, 0, "count",
+                        rawMetrics("confirmed_cycles", resource.cycles),
+                        List.of("farm:lane_jungle_cycles_by_slot:" + slot)));
             } else {
                 resourceMissing.add("confirmed_lane_jungle_cycles");
+                resourceInputs.add(missingComponent("confirmed_lane_jungle_cycles", "确认的线野循环",
+                        15, moduleConfidence(modules, "farm", 78), "confirmed_lane_jungle_cycles",
+                        List.of("farm:lane_jungle_cycles_by_slot:" + slot)));
             }
         } else {
             if (supportRoute != null) {
-                resourceParts.add(clamp(50 + (int) Math.round(number(supportRoute, "score") * 1.2),
-                        0, 100));
-                resourceWeights.add(65);
+                resourceInputs.add(component("support_route_outcome", "辅助路线结果",
+                        clamp(50 + (int) Math.round(number(supportRoute, "score") * 1.2), 0, 100),
+                        65, moduleConfidence(modules, "farm", 78), number(supportRoute, "score"),
+                        0, "route_score", rawMetrics("route_score", number(supportRoute, "score")),
+                        List.of("laning:reviews_by_slot:" + slot + ":support_route")));
             } else {
                 resourceMissing.add("support_route_outcomes");
+                resourceInputs.add(missingComponent("support_route_outcome", "辅助路线结果", 65,
+                        moduleConfidence(modules, "farm", 78), "support_route_outcomes",
+                        List.of("laning:reviews_by_slot:" + slot + ":support_route")));
             }
             if (resource.stackSummaryPresent) {
                 int stackScore = clamp(55 + resource.stackedCamps * 5
                         + Math.min(25, resource.stackValue / 60), 0, 100);
-                resourceParts.add(stackScore);
-                resourceWeights.add(35);
+                resourceInputs.add(component("stack_team_value", "堆野团队价值", stackScore, 35,
+                        moduleConfidence(modules, "farm", 78), resource.stackValue, 0, "gold",
+                        rawMetrics("stacked_camps", resource.stackedCamps,
+                                "created_gold_estimate", resource.stackValue),
+                        List.of("players:slot:" + slot + ":stack_value_summary")));
             } else {
                 resourceMissing.add("stack_team_value");
+                resourceInputs.add(missingComponent("stack_team_value", "堆野团队价值", 35,
+                        moduleConfidence(modules, "farm", 78), "stack_team_value",
+                        List.of("players:slot:" + slot + ":stack_value_summary")));
             }
-            resourceMissing.add("team_resource_claims");
         }
-        int resourceConfidence = resourceParts.isEmpty() ? 40
-                : Math.min(moduleConfidence(modules, "farm", 78),
-                        position <= 3 ? 68 + Math.min(18, resource.enabledWindows * 3)
-                                : supportRoute == null ? 60 : 74);
-        scores.put("resource", resourceParts.isEmpty()
-                ? missing(resourceConfidence, resourceMissing)
-                : dimension(weightedLists(resourceParts, resourceWeights), resourceConfidence,
-                        resourceMissing.isEmpty() ? "gated" : "partial", resourceMissing));
+        int resourceConfidence = Math.min(moduleConfidence(modules, "farm", 78),
+                position <= 3 ? 68 + Math.min(18, resource.enabledWindows * 3)
+                        : supportRoute == null ? 60 : 74);
+        scores.put("resource", dimensionFromComponents(resourceInputs, resourceConfidence,
+                resourceMissing.isEmpty() ? "gated" : "partial", resourceMissing));
 
         CombatSignals fight = combatSignals(modules, slot);
         double damageTarget = switch (position) {
@@ -289,46 +358,88 @@ final class PlayerReportAnalysis {
             case 4 -> 0.14;
             default -> 0.09;
         };
-        List<Integer> combatParts = new ArrayList<>();
-        List<Integer> combatWeights = new ArrayList<>();
+        List<String> combatMissing = new ArrayList<>();
+        List<PlayerReportBaseComponents.ComponentInput> combatInputs = new ArrayList<>();
         if (teamDamage > 0) {
-            combatParts.add(shareScore(preferred(own, "hero_damage", "damage_dealt"),
-                    teamDamage, damageTarget));
-            combatWeights.add(55);
+            double ownDamage = preferred(own, "hero_damage", "damage_dealt");
+            combatInputs.add(shareComponent("team_damage_share_vs_role_target",
+                    "团队伤害占比相对位置目标", ownDamage, teamDamage, damageTarget, 55,
+                    moduleConfidence(modules, "combat", 80), "damage",
+                    List.of("players:slot:" + slot + ":hero_damage")));
+        } else {
+            combatMissing.add("team_damage_share_inputs_missing");
+            combatInputs.add(missingComponent("team_damage_share_vs_role_target",
+                    "团队伤害占比相对位置目标", 55, moduleConfidence(modules, "combat", 80),
+                    "team_damage_share_inputs_missing",
+                    List.of("players:slot:" + slot + ":hero_damage")));
         }
         if (fight.reviewableFights > 0) {
-            combatParts.add(clamp(50 + (int) Math.round(
-                    (fight.averageDamageShare - damageTarget * 100) * 1.4), 0, 100));
-            combatWeights.add(25);
-            combatParts.add(clamp(fight.averageKillConversion, 0, 100));
-            combatWeights.add(20);
+            List<String> fightRefs = combatFightRefs(slot);
+            combatInputs.add(shareComponent("fight_damage_share_vs_role_target",
+                    "战斗伤害占比相对位置目标", fight.averageDamageShare, 100,
+                    damageTarget, 25, moduleConfidence(modules, "combat", 80), "percent",
+                    fightRefs));
+            combatInputs.add(component("kill_conversion", "击杀转化", fight.averageKillConversion,
+                    20, moduleConfidence(modules, "combat", 80), fight.averageKillConversion,
+                    100, "percent", rawMetrics("average_kill_conversion",
+                            fight.averageKillConversion, "reviewable_fights", fight.reviewableFights),
+                    fightRefs));
+        } else {
+            combatMissing.add("classified_combat_contributions");
+            combatInputs.add(missingComponent("fight_damage_share_vs_role_target",
+                    "战斗伤害占比相对位置目标", 25, moduleConfidence(modules, "combat", 80),
+                    "classified_combat_contributions", combatFightRefs(slot)));
+            combatInputs.add(missingComponent("kill_conversion", "击杀转化", 20,
+                    moduleConfidence(modules, "combat", 80), "classified_combat_contributions",
+                    combatFightRefs(slot)));
         }
-        List<String> combatMissing = new ArrayList<>();
-        if (fight.reviewableFights == 0) combatMissing.add("classified_combat_contributions");
-        int combatConfidence = combatParts.isEmpty() ? 35
+        int combatConfidence = combatInputs.stream()
+                .noneMatch(PlayerReportBaseComponents.ComponentInput::available) ? 35
                 : Math.min(moduleConfidence(modules, "combat", 80),
                         fight.reviewableFights > 0 ? 72 + Math.min(18, fight.reviewableFights) : 60);
-        scores.put("combat", combatParts.isEmpty()
-                ? missing(combatConfidence, combatMissing)
-                : dimension(weightedLists(combatParts, combatWeights), combatConfidence,
-                        combatMissing.isEmpty() ? "derived" : "partial", combatMissing));
+        scores.put("combat", dimensionFromComponents(combatInputs, combatConfidence,
+                combatMissing.isEmpty() ? "derived" : "partial", combatMissing));
 
         double ownUtility = utilityValue(own);
         double utilityTarget = position >= 4 ? 0.30 : position == 3 ? 0.18 : 0.11;
         List<String> dutyMissing = new ArrayList<>();
         dutyMissing.add("hero_specific_duty_context");
-        DimensionScore duty;
+        List<PlayerReportBaseComponents.ComponentInput> dutyInputs = new ArrayList<>();
         if (fight.passedDutyFights == 0) {
-            dutyMissing.add("passed_responsibility_gate_fights");
-            duty = missing(Math.min(50, fight.averageDutyConfidence), dutyMissing);
+            dutyMissing.add("no_passed_responsibility_gate_fights");
+            dutyInputs.add(missingComponent("hard_gated_duty_average", "硬门控职责平均分", 75,
+                    Math.min(50, fight.averageDutyConfidence),
+                    "no_passed_responsibility_gate_fights", combatFightRefs(slot)));
         } else {
-            int utility = weighted(fight.averageDutyScore, 75,
-                    shareScore(ownUtility, teamUtility, utilityTarget), 25);
-            int utilityConfidence = Math.min(moduleConfidence(modules, "combat", 80),
-                    fight.averageDutyConfidence);
-            duty = dimension(utility, utilityConfidence, "gated", dutyMissing);
+            dutyInputs.add(component("hard_gated_duty_average", "硬门控职责平均分",
+                    fight.averageDutyScore, 75, fight.averageDutyConfidence,
+                    fight.averageDutyScore, 100, "score", rawMetrics("passed_duty_fights",
+                            fight.passedDutyFights, "average_duty_score", fight.averageDutyScore),
+                    combatFightRefs(slot)));
         }
-        scores.put("utility", duty);
+        if (teamUtility > 0) {
+            if (fight.passedDutyFights == 0) {
+                dutyInputs.add(suppressedComponent("team_utility_share_vs_role_target",
+                        "团队效用占比相对位置目标", 25, moduleConfidence(modules, "combat", 80),
+                        "responsibility_gate_not_passed",
+                        List.of("players:slot:" + slot + ":utility")));
+            } else {
+                dutyInputs.add(shareComponent("team_utility_share_vs_role_target",
+                        "团队效用占比相对位置目标", ownUtility, teamUtility, utilityTarget, 25,
+                        moduleConfidence(modules, "combat", 80), "utility",
+                        List.of("players:slot:" + slot + ":utility")));
+            }
+        } else {
+            dutyMissing.add("team_utility_share_inputs_missing");
+            dutyInputs.add(missingComponent("team_utility_share_vs_role_target",
+                    "团队效用占比相对位置目标", 25, moduleConfidence(modules, "combat", 80),
+                    "team_utility_share_inputs_missing",
+                    List.of("players:slot:" + slot + ":utility")));
+        }
+        int dutyConfidence = fight.passedDutyFights == 0 ? Math.min(50, fight.averageDutyConfidence)
+                : Math.min(moduleConfidence(modules, "combat", 80), fight.averageDutyConfidence);
+        scores.put("utility", dimensionFromComponents(dutyInputs, dutyConfidence,
+                dutyMissing.isEmpty() ? "gated" : "partial", dutyMissing));
 
         double ownVision = visionValue(own);
         double visionTarget = switch (position) {
@@ -340,28 +451,81 @@ final class PlayerReportAnalysis {
         };
         VisionSignals visionFacts = visionSignals(modules, slot);
         List<String> visionMissing = new ArrayList<>();
-        if (!visionFacts.modulePresent) visionMissing.add("ward_lifecycle_module");
+        List<PlayerReportBaseComponents.ComponentInput> visionInputs = new ArrayList<>();
+        if (teamVision > 0) {
+            visionInputs.add(shareComponent("team_vision_share_vs_role_target",
+                    "团队视野占比相对位置目标", ownVision, teamVision, visionTarget, 65,
+                    moduleConfidence(modules, "vision", 76), "vision_value",
+                    List.of("players:slot:" + slot + ":vision")));
+        } else {
+            visionMissing.add("team_vision_share_inputs_missing");
+            visionInputs.add(missingComponent("team_vision_share_vs_role_target",
+                    "团队视野占比相对位置目标", 65, moduleConfidence(modules, "vision", 76),
+                    "team_vision_share_inputs_missing",
+                    List.of("players:slot:" + slot + ":vision")));
+        }
+        if (!visionFacts.modulePresent) {
+            visionMissing.add("ward_lifecycle_module");
+            visionInputs.add(missingComponent("own_ward_average_score", "个人眼位平均评分",
+                    35, moduleConfidence(modules, "vision", 76), "ward_lifecycle_module",
+                    List.of("vision:wards:slot:" + slot)));
+        } else {
+            visionInputs.add(component("own_ward_average_score", "个人眼位平均评分",
+                    visionFacts.wards > 0 ? visionFacts.averageScore : 50, 35,
+                    moduleConfidence(modules, "vision", 76), visionFacts.averageScore, 100,
+                    "score", rawMetrics("wards", visionFacts.wards,
+                            "average_score", visionFacts.averageScore,
+                            "average_duration", visionFacts.averageDuration,
+                            "detections", visionFacts.detections),
+                    List.of("vision:wards:slot:" + slot)));
+        }
         if (!visionFacts.hasDetectionEvidence) visionMissing.add("enemy_detection_events");
-        int visionConfidence = !visionFacts.modulePresent || teamVision <= 0 ? 40
-                : Math.min(moduleConfidence(modules, "vision", 76), 82);
-        int vision = weighted(shareScore(ownVision, teamVision, visionTarget), 65,
-                visionFacts.wards > 0 ? clamp(visionFacts.averageScore, 0, 100) : 50, 35);
-        scores.put("vision", visionConfidence < 55
-                ? missing(visionConfidence, visionMissing)
-                : dimension(vision, visionConfidence,
-                        visionMissing.isEmpty() ? "derived" : "partial", visionMissing));
+        int visionConfidence = visionFacts.modulePresent
+                ? Math.min(moduleConfidence(modules, "vision", 76), 82)
+                : teamVision <= 0 ? 40 : Math.min(moduleConfidence(modules, "vision", 76), 68);
+        scores.put("vision", dimensionFromComponents(visionInputs, visionConfidence,
+                visionMissing.isEmpty() ? "derived" : "partial", visionMissing));
 
-        int deaths = intValue(own, "deaths", 0);
-        int opponentDeaths = intValue(roleOpponent, "deaths", deaths);
-        double deadPct = duration <= 0 ? 0 : number(own, "dead_seconds") * 100.0 / duration;
-        int survival = weighted(relativeScore(opponentDeaths, deaths), 65,
-                clamp((int) Math.round(88 - deadPct * 2.2), 0, 100), 35);
-        List<String> survivalMissing = List.of("death_context_quality", "retreat_decision_context");
+        List<String> survivalMissing = new ArrayList<>();
+        survivalMissing.add("death_context_quality");
+        survivalMissing.add("retreat_decision_context");
+        List<PlayerReportBaseComponents.ComponentInput> survivalInputs = new ArrayList<>();
+        if (hasNumber(own, "deaths") && hasNumber(roleOpponent, "deaths")) {
+            double deaths = number(own, "deaths");
+            double opponentDeaths = number(roleOpponent, "deaths");
+            survivalInputs.add(component("deaths_vs_same_position", "同位置死亡数对比",
+                    relativeScore(opponentDeaths, deaths), 65,
+                    moduleConfidence(modules, "players", 74), deaths, opponentDeaths, "count",
+                    rawMetrics("subject_deaths", deaths, "reference_deaths", opponentDeaths),
+                    List.of("players:slot:" + slot + ":deaths",
+                            "players:slot:" + roleCounterpart + ":deaths")));
+        } else {
+            survivalMissing.add("subject_or_same_position_deaths_missing");
+            survivalInputs.add(missingComponent("deaths_vs_same_position", "同位置死亡数对比", 65,
+                    moduleConfidence(modules, "players", 74),
+                    "subject_or_same_position_deaths_missing",
+                    List.of("players:slot:" + slot + ":deaths",
+                            "players:slot:" + roleCounterpart + ":deaths")));
+        }
+        if (duration > 0 && hasNumber(own, "dead_seconds")) {
+            double deadSeconds = number(own, "dead_seconds");
+            double deadPct = deadSeconds * 100.0 / duration;
+            survivalInputs.add(component("dead_time_percentage_score", "死亡时间占比评分",
+                    clamp((int) Math.round(88 - deadPct * 2.2), 0, 100), 35,
+                    moduleConfidence(modules, "players", 74), deadPct, 0, "percent",
+                    rawMetrics("dead_seconds", deadSeconds, "duration_seconds", duration,
+                            "dead_time_percentage", deadPct),
+                    List.of("players:slot:" + slot + ":dead_seconds")));
+        } else {
+            survivalMissing.add("dead_time_or_duration_missing");
+            survivalInputs.add(missingComponent("dead_time_percentage_score", "死亡时间占比评分", 35,
+                    moduleConfidence(modules, "players", 74), "dead_time_or_duration_missing",
+                    List.of("players:slot:" + slot + ":dead_seconds")));
+        }
         int survivalConfidence = duration <= 0 ? 35
                 : Math.min(moduleConfidence(modules, "players", 74), 72);
-        scores.put("survival", survivalConfidence < 55
-                ? missing(survivalConfidence, survivalMissing)
-                : dimension(survival, survivalConfidence, "partial", survivalMissing));
+        scores.put("survival", dimensionFromComponents(survivalInputs, survivalConfidence,
+                "partial", survivalMissing));
 
         double towerTarget = switch (position) {
             case 1 -> 0.30;
@@ -370,19 +534,52 @@ final class PlayerReportAnalysis {
             case 4 -> 0.14;
             default -> 0.10;
         };
-        int objective = weighted(shareScore(number(own, "tower_damage"), teamTower, towerTarget), 75,
-                clamp(50 + intValue(own, "tower_kills", 0) * 12
-                        + intValue(own, "roshan_kills", 0) * 14, 0, 100), 25);
         List<String> objectiveMissing = new ArrayList<>();
         objectiveMissing.add("objective_setup_attribution");
+        List<PlayerReportBaseComponents.ComponentInput> objectiveInputs = new ArrayList<>();
+        boolean completeTowerDamageDenominator = hasCompleteTeamNumber(bySlot, teamStart,
+                "tower_damage");
+        if (teamTower > 0 && hasNumber(own, "tower_damage") && completeTowerDamageDenominator) {
+            objectiveInputs.add(shareComponent("team_tower_damage_share_vs_role_target",
+                    "团队防御塔伤害占比相对位置目标", number(own, "tower_damage"), teamTower,
+                    towerTarget, 75, moduleConfidence(modules, "objectives", 74), "damage",
+                    List.of("players:slot:" + slot + ":tower_damage")));
+        } else {
+            String towerDamageReason = completeTowerDamageDenominator
+                    ? "team_tower_damage_share_inputs_missing"
+                    : "team_tower_damage_denominator_incomplete";
+            objectiveMissing.add(towerDamageReason);
+            objectiveInputs.add(missingComponent("team_tower_damage_share_vs_role_target",
+                    "团队防御塔伤害占比相对位置目标", 75,
+                    moduleConfidence(modules, "objectives", 74),
+                    towerDamageReason,
+                    List.of("players:slot:" + slot + ":tower_damage")));
+        }
+        if (hasNumber(own, "tower_kills") && hasNumber(own, "roshan_kills")) {
+            double towerKills = number(own, "tower_kills");
+            double roshanKills = number(own, "roshan_kills");
+            objectiveInputs.add(component("tower_roshan_finish_contribution", "推塔与肉山终结贡献",
+                    clamp((int) Math.round(50 + towerKills * 12 + roshanKills * 14), 0, 100),
+                    25, moduleConfidence(modules, "objectives", 74), towerKills + roshanKills,
+                    0, "count", rawMetrics("tower_kills", towerKills,
+                            "roshan_kills", roshanKills),
+                    List.of("players:slot:" + slot + ":tower_kills",
+                            "players:slot:" + slot + ":roshan_kills")));
+        } else {
+            objectiveMissing.add("tower_or_roshan_finish_inputs_missing");
+            objectiveInputs.add(missingComponent("tower_roshan_finish_contribution", "推塔与肉山终结贡献",
+                    25, moduleConfidence(modules, "objectives", 74),
+                    "tower_or_roshan_finish_inputs_missing",
+                    List.of("players:slot:" + slot + ":tower_kills",
+                            "players:slot:" + slot + ":roshan_kills")));
+        }
         int objectiveConfidence = teamTower <= 0
                 && intValue(own, "tower_kills", 0) == 0 && intValue(own, "roshan_kills", 0) == 0
                         ? 45
                         : Math.min(moduleConfidence(modules, "objectives", 74),
                                 position >= 4 ? 68 : 78);
-        scores.put("objective", objectiveConfidence < 55
-                ? missing(objectiveConfidence, objectiveMissing)
-                : dimension(objective, objectiveConfidence, "partial", objectiveMissing));
+        scores.put("objective", dimensionFromComponents(objectiveInputs, objectiveConfidence,
+                "partial", objectiveMissing));
 
         double tempoTarget = switch (position) {
             case 1 -> 0.12;
@@ -390,43 +587,83 @@ final class PlayerReportAnalysis {
             case 3 -> 0.20;
             default -> 0.24;
         };
-        List<Integer> activationParts = new ArrayList<>();
-        if (number(roleOpponent, "teleport_uses") > 0 || number(own, "teleport_uses") > 0) {
-            activationParts.add(relativeScore(number(own, "teleport_uses"),
-                    number(roleOpponent, "teleport_uses")));
-        }
-        if (preferred(roleOpponent, "aggregate_rune_pickups", "rune_pickups") > 0
-                || preferred(own, "aggregate_rune_pickups", "rune_pickups") > 0) {
-            activationParts.add(relativeScore(
-                    preferred(own, "aggregate_rune_pickups", "rune_pickups"),
-                    preferred(roleOpponent, "aggregate_rune_pickups", "rune_pickups")));
-        }
         int presenceTarget = position == 1 ? 55 : position <= 3 ? 65 : 72;
-        List<Integer> tempoParts = new ArrayList<>();
-        List<Integer> tempoWeights = new ArrayList<>();
-        if (teamTempo > 0) {
-            tempoParts.add(shareScore(tempoValue(own), teamTempo, tempoTarget));
-            tempoWeights.add(45);
+        List<String> tempoMissing = new ArrayList<>();
+        List<PlayerReportBaseComponents.ComponentInput> tempoInputs = new ArrayList<>();
+        if (teamTempo > 0 && hasTempoSignals(own)) {
+            tempoInputs.add(shareComponent("team_tempo_share_vs_role_target",
+                    "团队节奏占比相对位置目标", tempoValue(own), teamTempo, tempoTarget, 45,
+                    moduleConfidence(modules, "timeline", 80), "tempo_value",
+                    List.of("players:slot:" + slot + ":tempo_signals")));
+        } else {
+            tempoMissing.add("team_tempo_share_inputs_missing");
+            tempoInputs.add(missingComponent("team_tempo_share_vs_role_target",
+                    "团队节奏占比相对位置目标", 45, moduleConfidence(modules, "timeline", 80),
+                    "team_tempo_share_inputs_missing",
+                    List.of("players:slot:" + slot + ":tempo_signals")));
         }
-        if (!activationParts.isEmpty()) {
-            tempoParts.add(average(activationParts));
-            tempoWeights.add(25);
+        boolean tpAvailable = hasNumber(own, "teleport_uses")
+                && hasNumber(roleOpponent, "teleport_uses");
+        boolean runeAvailable = hasPreferredNumber(own, "aggregate_rune_pickups", "rune_pickups")
+                && hasPreferredNumber(roleOpponent, "aggregate_rune_pickups", "rune_pickups");
+        Double ownTp = tpAvailable ? number(own, "teleport_uses") : null;
+        Double opponentTp = tpAvailable ? number(roleOpponent, "teleport_uses") : null;
+        Double ownRunes = runeAvailable
+                ? preferred(own, "aggregate_rune_pickups", "rune_pickups") : null;
+        Double opponentRunes = runeAvailable
+                ? preferred(roleOpponent, "aggregate_rune_pickups", "rune_pickups") : null;
+        Integer tpScore = tpAvailable ? relativeScore(ownTp, opponentTp) : null;
+        Integer runeScore = runeAvailable ? relativeScore(ownRunes, opponentRunes) : null;
+        JsonObject activationMetrics = rawMetrics("tp_available", tpAvailable,
+                "rune_available", runeAvailable);
+        nullableMetric(activationMetrics, "tp_subject", ownTp);
+        nullableMetric(activationMetrics, "tp_reference", opponentTp);
+        nullableMetric(activationMetrics, "tp_score", tpScore);
+        nullableMetric(activationMetrics, "rune_subject", ownRunes);
+        nullableMetric(activationMetrics, "rune_reference", opponentRunes);
+        nullableMetric(activationMetrics, "rune_score", runeScore);
+        if (tpAvailable || runeAvailable) {
+            int activationScore = tpAvailable && runeAvailable ? average(tpScore, runeScore)
+                    : tpAvailable ? tpScore : runeScore;
+            tempoInputs.add(component("tp_rune_activation_relative_score", "传送与神符激活相对评分",
+                    activationScore, 25, moduleConfidence(modules, "timeline", 80), activationScore,
+                    50, "score", activationMetrics,
+                    List.of("players:slot:" + slot + ":teleport_uses",
+                            "players:slot:" + roleCounterpart + ":teleport_uses",
+                            "players:slot:" + slot + ":aggregate_rune_pickups",
+                            "players:slot:" + roleCounterpart + ":aggregate_rune_pickups")));
+        } else {
+            tempoMissing.add("tp_and_rune_activation_inputs_missing");
+            tempoInputs.add(missingComponentWithRawMetrics(
+                    "tp_rune_activation_relative_score", "传送与神符激活相对评分",
+                    25, moduleConfidence(modules, "timeline", 80),
+                    "tp_and_rune_activation_inputs_missing",
+                    activationMetrics,
+                    List.of("players:slot:" + slot + ":teleport_uses",
+                            "players:slot:" + roleCounterpart + ":teleport_uses",
+                            "players:slot:" + slot + ":aggregate_rune_pickups",
+                            "players:slot:" + roleCounterpart + ":aggregate_rune_pickups")));
         }
         if (fight.reviewableFights > 0) {
-            tempoParts.add(clamp(50 + (int) Math.round(
-                    (fight.averagePresence - presenceTarget) * 0.8), 0, 100));
-            tempoWeights.add(30);
+            tempoInputs.add(component("fight_presence_vs_role_target", "团战到场率相对位置目标",
+                    clamp(50 + (int) Math.round((fight.averagePresence - presenceTarget) * 0.8), 0, 100),
+                    30, moduleConfidence(modules, "combat", 80), fight.averagePresence,
+                    presenceTarget, "percent", rawMetrics("average_fight_presence", fight.averagePresence,
+                            "role_target", presenceTarget, "reviewable_fights", fight.reviewableFights),
+                    combatFightRefs(slot)));
+        } else {
+            tempoMissing.add("classified_fight_arrival_windows");
+            tempoInputs.add(missingComponent("fight_presence_vs_role_target", "团战到场率相对位置目标",
+                    30, moduleConfidence(modules, "combat", 80),
+                    "classified_fight_arrival_windows", combatFightRefs(slot)));
         }
-        List<String> tempoMissing = new ArrayList<>();
-        if (fight.reviewableFights == 0) tempoMissing.add("classified_fight_arrival_windows");
         tempoMissing.add("key_item_activation_windows");
-        int tempoConfidence = tempoParts.isEmpty() ? 40
+        int tempoConfidence = tempoInputs.stream()
+                .noneMatch(PlayerReportBaseComponents.ComponentInput::available) ? 40
                 : Math.min(moduleConfidence(modules, "timeline", 80),
                         fight.reviewableFights > 0 ? 78 : 65);
-        scores.put("tempo", tempoParts.isEmpty()
-                ? missing(tempoConfidence, tempoMissing)
-                : dimension(weightedLists(tempoParts, tempoWeights), tempoConfidence,
-                        "partial", tempoMissing));
+        scores.put("tempo", dimensionFromComponents(tempoInputs, tempoConfidence,
+                "partial", tempoMissing));
 
         double minutes = duration <= 0 ? 0 : duration / 60.0;
         double apm = number(own, "actions_per_min");
@@ -434,22 +671,53 @@ final class PlayerReportAnalysis {
         executionMissing.add("invalid_order_rate");
         executionMissing.add("camera_movement");
         executionMissing.add("hero_specific_combo_windows");
-        if (minutes < 5 || apm <= 0) {
-            scores.put("execution", missing(35, executionMissing));
+        List<PlayerReportBaseComponents.ComponentInput> executionInputs = new ArrayList<>();
+        if (minutes < 5 || !hasNumber(own, "actions_per_min")) {
+            executionMissing.add("action_continuity_apm_missing");
+            executionInputs.add(missingComponent("action_continuity_apm", "操作连续性 APM", 60,
+                    moduleConfidence(modules, "players", 76), "action_continuity_apm_missing",
+                    List.of("players:slot:" + slot + ":actions_per_min")));
         } else {
             int actionContinuity = clamp((int) Math.round(40 + Math.max(0, apm - 60) * 0.2),
                     30, 85);
+            executionInputs.add(component("action_continuity_apm", "操作连续性 APM", actionContinuity,
+                    60, moduleConfidence(modules, "players", 76), apm, 60, "actions_per_minute",
+                    rawMetrics("actions_per_min", apm, "continuity_floor", 60),
+                    List.of("players:slot:" + slot + ":actions_per_min")));
+        }
+        if (minutes >= 5 && hasNumber(own, "ability_casts") && hasNumber(own, "item_uses")
+                && hasNumber(roleOpponent, "ability_casts") && hasNumber(roleOpponent, "item_uses")) {
             double ownUses = (number(own, "ability_casts") + number(own, "item_uses")) / minutes;
             double opponentUses = (number(roleOpponent, "ability_casts")
                     + number(roleOpponent, "item_uses")) / minutes;
-            int execution = opponentUses > 0
-                    ? weighted(actionContinuity, 60, relativeScore(ownUses, opponentUses), 40)
-                    : actionContinuity;
-            int executionConfidence = Math.min(moduleConfidence(modules, "players", 76),
-                    opponentUses > 0 ? 72 : 62);
-            scores.put("execution", dimension(execution, executionConfidence,
-                    "partial", executionMissing));
+            executionInputs.add(component("observable_uses_per_minute_vs_opponent",
+                    "可观察技能与物品使用频率对比", relativeScore(ownUses, opponentUses), 40,
+                    moduleConfidence(modules, "players", 76), ownUses, opponentUses, "per_minute",
+                    rawMetrics("subject_ability_casts", number(own, "ability_casts"),
+                            "subject_item_uses", number(own, "item_uses"),
+                            "reference_ability_casts", number(roleOpponent, "ability_casts"),
+                            "reference_item_uses", number(roleOpponent, "item_uses"),
+                            "duration_minutes", minutes),
+                    List.of("players:slot:" + slot + ":ability_casts",
+                            "players:slot:" + slot + ":item_uses",
+                            "players:slot:" + roleCounterpart + ":ability_casts",
+                            "players:slot:" + roleCounterpart + ":item_uses")));
+        } else {
+            executionMissing.add("subject_or_opponent_observable_uses_missing");
+            executionInputs.add(missingComponent("observable_uses_per_minute_vs_opponent",
+                    "可观察技能与物品使用频率对比", 40,
+                    moduleConfidence(modules, "players", 76),
+                    "subject_or_opponent_observable_uses_missing",
+                    List.of("players:slot:" + slot + ":ability_casts",
+                            "players:slot:" + slot + ":item_uses",
+                            "players:slot:" + roleCounterpart + ":ability_casts",
+                            "players:slot:" + roleCounterpart + ":item_uses")));
         }
+        int executionConfidence = minutes < 5 ? 35 : Math.min(moduleConfidence(modules, "players", 76),
+                executionInputs.stream().filter(PlayerReportBaseComponents.ComponentInput::available)
+                        .count() == 2 ? 72 : 62);
+        scores.put("execution", dimensionFromComponents(executionInputs, executionConfidence,
+                "partial", executionMissing));
 
         return new BaseScores(scores);
     }
@@ -765,6 +1033,114 @@ final class PlayerReportAnalysis {
         return clamp(intValue(evidence, "confidence", fallback), 0, 100);
     }
 
+    private static void addRelativeComponent(
+            List<PlayerReportBaseComponents.ComponentInput> inputs, List<String> missing,
+            JsonObject own, JsonObject counterpart, String metricKey, String componentKey,
+            String label, double weight, int slot, int counterpartSlot) {
+        double ownValue = number(own, metricKey);
+        double counterpartValue = number(counterpart, metricKey);
+        String reason = "counterpart_or_subject_" + metricKey + "_missing";
+        if (ownValue <= 0 || counterpartValue <= 0) {
+            missing.add(reason);
+            inputs.add(missingComponent(componentKey, label, weight, 0, reason,
+                    List.of("players:slot:" + slot + ":" + metricKey,
+                            "players:slot:" + counterpartSlot + ":" + metricKey)));
+            return;
+        }
+        inputs.add(component(componentKey, label, relativeScore(ownValue, counterpartValue),
+                weight, 84, ownValue, counterpartValue, metricKey.equals("networth") ? "gold" : "per_minute",
+                rawMetrics("subject", ownValue, "reference", counterpartValue),
+                List.of("players:slot:" + slot + ":" + metricKey,
+                        "players:slot:" + counterpartSlot + ":" + metricKey)));
+    }
+
+    private static PlayerReportBaseComponents.ComponentInput component(String key, String label,
+            double score, double weight, int confidence, double subject, double reference,
+            String unit, JsonObject rawMetrics, List<String> evidenceRefs) {
+        return PlayerReportBaseComponents.available(key, label, score, weight, confidence,
+                comparison(subject, reference, unit), rawMetrics, evidenceRefs);
+    }
+
+    private static PlayerReportBaseComponents.ComponentInput missingComponent(String key, String label,
+            double weight, int confidence, String reason, List<String> evidenceRefs) {
+        return PlayerReportBaseComponents.missing(key, label, weight, confidence, reason, evidenceRefs);
+    }
+
+    private static PlayerReportBaseComponents.ComponentInput missingComponentWithRawMetrics(
+            String key, String label, double weight, int confidence, String reason,
+            JsonObject rawMetrics, List<String> evidenceRefs) {
+        return new PlayerReportBaseComponents.ComponentInput(key, label, false, null, weight,
+                confidence, new JsonObject(), rawMetrics, List.copyOf(evidenceRefs), reason, null);
+    }
+
+    private static PlayerReportBaseComponents.ComponentInput suppressedComponent(String key, String label,
+            double weight, int confidence, String reason, List<String> evidenceRefs) {
+        return PlayerReportBaseComponents.suppressed(key, label, weight, confidence, reason, evidenceRefs);
+    }
+
+    private static PlayerReportBaseComponents.ComponentInput shareComponent(String key, String label,
+            double subjectValue, double teamTotal, double roleTargetShare, double weight,
+            int confidence, String unit, List<String> evidenceRefs) {
+        return component(key, label, shareScore(subjectValue, teamTotal, roleTargetShare), weight,
+                confidence, subjectValue, teamTotal, unit, rawMetrics(
+                        "subject_value", subjectValue,
+                        "team_total", teamTotal,
+                        "subject_share", teamTotal <= 0 ? 0 : subjectValue / teamTotal,
+                        "role_target_share", roleTargetShare), evidenceRefs);
+    }
+
+    private static List<String> combatFightRefs(int slot) {
+        return List.of("combat:fights", "combat:fights:slot:" + slot);
+    }
+
+    private static JsonObject comparison(double subject, double reference, String unit) {
+        JsonObject result = new JsonObject();
+        result.addProperty("subject", round2(subject));
+        result.addProperty("reference", round2(reference));
+        result.addProperty("unit", unit);
+        return result;
+    }
+
+    private static JsonObject rawMetrics(Object... values) {
+        JsonObject result = new JsonObject();
+        for (int index = 0; index + 1 < values.length; index += 2) {
+            String key = (String) values[index];
+            Object value = values[index + 1];
+            if (value instanceof Number number) result.addProperty(key, number);
+            else if (value instanceof Boolean flag) result.addProperty(key, flag);
+            else result.addProperty(key, String.valueOf(value));
+        }
+        return result;
+    }
+
+    private static void nullableMetric(JsonObject metrics, String key, Number value) {
+        if (value == null) metrics.add(key, JsonNull.INSTANCE);
+        else metrics.addProperty(key, value);
+    }
+
+    private static DimensionScore dimensionFromComponents(
+            List<PlayerReportBaseComponents.ComponentInput> inputs, int confidence,
+            String evidenceLevel, List<String> missing) {
+        var calculation = PlayerReportBaseComponents.calculate(inputs);
+        int normalizedConfidence = clamp(confidence, 0, 100);
+        boolean available = calculation.available() && normalizedConfidence >= 55;
+        if (!available && calculation.available()) {
+            calculation = PlayerReportBaseComponents.calculate(calculation.components().stream()
+                    .map(PlayerReportBaseComponents.ComponentResult::input)
+                    .map(input -> input.available()
+                            ? new PlayerReportBaseComponents.ComponentInput(
+                                    input.key(), input.label(), false, null,
+                                    input.localWeight(), input.confidence(),
+                                    input.comparison(), input.rawMetrics(),
+                                    input.evidenceRefs(), null, "dimension_unavailable")
+                            : input)
+                    .toList());
+        }
+        return new DimensionScore(available ? calculation.score() : null,
+                normalizedConfidence, available, available ? evidenceLevel : "partial",
+                List.copyOf(missing), calculation);
+    }
+
     private static void addRelativeMetric(List<Integer> scores, List<String> missing,
             JsonObject own, JsonObject counterpart, String key) {
         double ownValue = number(own, key);
@@ -780,13 +1156,16 @@ final class PlayerReportAnalysis {
             List<String> missing) {
         int normalizedConfidence = clamp(confidence, 0, 100);
         boolean available = normalizedConfidence >= 55;
-        return new DimensionScore(clamp(score, 0, 100), normalizedConfidence, available,
-                available ? evidenceLevel : "partial", List.copyOf(missing));
+        return new DimensionScore(available ? (double) clamp(score, 0, 100) : null,
+                normalizedConfidence, available,
+                available ? evidenceLevel : "partial", List.copyOf(missing),
+                new PlayerReportBaseComponents.Calculation(false, null, List.of()));
     }
 
     private static DimensionScore missing(int confidence, List<String> missing) {
         List<String> reasons = missing.isEmpty() ? List.of("minimum_evidence_not_met") : List.copyOf(missing);
-        return new DimensionScore(50, clamp(confidence, 0, 54), false, "missing", reasons);
+        return new DimensionScore(null, clamp(confidence, 0, 54), false, "missing", reasons,
+                new PlayerReportBaseComponents.Calculation(false, null, List.of()));
     }
 
     private static int weightedLists(List<Integer> values, List<Integer> weights) {
@@ -847,6 +1226,13 @@ final class PlayerReportAnalysis {
             total += fallback == null ? number(row, primary) : preferred(row, primary, fallback);
         }
         return total;
+    }
+
+    private static boolean hasCompleteTeamNumber(JsonObject bySlot, int start, String key) {
+        for (int slot = start; slot < start + 5; slot++) {
+            if (!hasNumber(object(bySlot, Integer.toString(slot)), key)) return false;
+        }
+        return true;
     }
 
     private static double teamActivity(JsonObject bySlot, int start, String type) {
@@ -974,6 +1360,18 @@ final class PlayerReportAnalysis {
         return value > 0 ? value : number(row, fallback);
     }
 
+    private static boolean hasPreferredNumber(JsonObject row, String primary, String fallback) {
+        return hasNumber(row, primary) || hasNumber(row, fallback);
+    }
+
+    private static boolean hasTempoSignals(JsonObject row) {
+        return hasNumber(row, "assists") || hasNumber(row, "teleport_uses")
+                || hasPreferredNumber(row, "aggregate_rune_pickups", "rune_pickups")
+                || hasPreferredNumber(row, "aggregate_camps_stacked", "camps_stacked")
+                || object(row, "stack_value_summary") != null
+                || hasNumber(row, "teamfight_participation");
+    }
+
     private static int preferredInt(JsonObject row, String primary, String fallback) {
         return (int) Math.round(preferred(row, primary, fallback));
     }
@@ -986,6 +1384,18 @@ final class PlayerReportAnalysis {
             return value.getAsDouble();
         } catch (RuntimeException ignored) {
             return 0;
+        }
+    }
+
+    private static boolean hasNumber(JsonObject object, String key) {
+        if (object == null) return false;
+        JsonElement value = object.get(key);
+        if (value == null || value.isJsonNull()) return false;
+        try {
+            value.getAsDouble();
+            return true;
+        } catch (RuntimeException ignored) {
+            return false;
         }
     }
 
@@ -1051,6 +1461,10 @@ final class PlayerReportAnalysis {
         return Math.round(value * 10.0) / 10.0;
     }
 
+    private static double round2(double value) {
+        return Math.round(value * 100.0) / 100.0;
+    }
+
     private record DimensionSpec(String key, String source, int weight) {
     }
 
@@ -1060,8 +1474,9 @@ final class PlayerReportAnalysis {
     private record Profile(List<DimensionSpec> dimensions) {
     }
 
-    private record DimensionScore(int score, int confidence, boolean available,
-            String evidenceLevel, List<String> missing) {
+    private record DimensionScore(Double score, int confidence, boolean available,
+            String evidenceLevel, List<String> missing,
+            PlayerReportBaseComponents.Calculation baseCalculation) {
     }
 
     private record ResourceSignals(int reviewWindows, int enabledWindows, int matchedWindows,
@@ -1082,13 +1497,15 @@ final class PlayerReportAnalysis {
     private record BaseScores(Map<String, DimensionScore> values) {
         int score(String key) {
             DimensionScore dimension = values.get(key);
-            return dimension == null || !dimension.available ? 50 : dimension.score;
+            return dimension == null || !dimension.available ? 50
+                    : clamp((int) Math.round(dimension.score), 0, 100);
         }
 
         DimensionScore dimension(String key) {
             return values.getOrDefault(key,
-                    new DimensionScore(50, 0, false, "missing",
-                            List.of("dimension_not_implemented")));
+                    new DimensionScore(null, 0, false, "missing",
+                            List.of("dimension_not_implemented"),
+                            new PlayerReportBaseComponents.Calculation(false, null, List.of())));
         }
     }
 }

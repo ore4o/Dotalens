@@ -3,6 +3,7 @@ package opendota;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -30,14 +31,19 @@ final class PlayerReportNarrativeV3 {
         List<JsonObject> insights = new ArrayList<>();
         addLaneInsights(insights, lane, slot, position, reportConfidence);
         addFarmInsight(insights, farm, slot, position, reportConfidence, evidenceIndex);
-        addCombatInsights(insights, fights, slot, position, reportConfidence, evidenceIndex);
+        Set<String> timingCoveredFightIds = addCombatTimingInsights(
+                insights, report, fights, slot, position, reportConfidence, evidenceIndex);
+        addCombatInsights(insights, fights, slot, position, reportConfidence, evidenceIndex,
+                timingCoveredFightIds);
         ensureAggregateStrength(insights, dimensionRows, slot, position, reportConfidence);
 
+        PlayerReportEventCandidatePool.Result eventPool = PlayerReportEventCandidatePool.build(
+                modules, insights, evidenceIndex, slot, position, reportConfidence);
+        mergeGeneratedInsights(insights, eventPool.generatedInsights());
         JsonArray rootCauses = PlayerReportRootCauseAnalysis.aggregate(
                 modules, facts, insights, evidenceIndex, slot, position, dimensionRows);
         linkDimensionInsights(dimensionRows, insights);
-        JsonArray storyNodes = storyNodes(facts, lane, farm, fights, slot, position, reportConfidence,
-                phaseScores, dimensionRows, evidenceIndex);
+        JsonArray storyNodes = eventPool.storyNodes();
         JsonArray insightRows = toArray(insights);
         JsonArray trainingPlan = trainingPlan(insights, slot, position);
         JsonObject scoreCard = scoreCard(report, dimensionRows, reportConfidence, overall, rootCauses);
@@ -50,6 +56,10 @@ final class PlayerReportNarrativeV3 {
         report.add("root_causes", rootCauses);
         report.add("training_plan", trainingPlan);
         report.add("evidence_index", evidenceIndex);
+        report.addProperty("event_candidate_model", PlayerReportEventCandidatePool.MODEL);
+        report.add("event_candidates", eventPool.candidates());
+        report.add("important_events", eventPool.importantEvents());
+        report.addProperty("localization_model", PlayerReportLocalization.MODEL);
 
         JsonArray caveats = new JsonArray();
         caveats.add("single_match_relative_not_rank_percentile");
@@ -227,6 +237,8 @@ final class PlayerReportNarrativeV3 {
                         supportLaneAction(position), "development", lane.time, slot, lane.reference);
                 insight.add("dimension_impacts", impacts("lane_execution", deaths > 0 ? -5.0 : -3.0,
                         "map_tempo", gains > 0 ? 1.0 : -2.0));
+                applyLocalization(insight,
+                        PlayerReportLocalization.forLane(lane.review, lane.time, lane.reference, slot));
                 insights.add(insight);
             } else if (away >= 30 && deaths == 0 && gains >= 2) {
                 JsonObject insight = insight("insight:lane-support-" + slot, "strength",
@@ -237,6 +249,8 @@ final class PlayerReportNarrativeV3 {
                         "这类离线同时创造团队价值并释放核心单吃经验空间。",
                         supportLaneKeepAction(position), "development", lane.time, slot, lane.reference);
                 insight.add("dimension_impacts", impacts("lane_execution", 2.0, "map_tempo", 3.0));
+                applyLocalization(insight,
+                        PlayerReportLocalization.forLane(lane.review, lane.time, lane.reference, slot));
                 insights.add(insight);
             }
             return;
@@ -247,16 +261,19 @@ final class PlayerReportNarrativeV3 {
         String fact = "10分钟主要对位补刀差 " + signed(intValue(checkpoint, "last_hits_diff", 0))
                 + "，等级差 " + signed(intValue(checkpoint, "level_diff", 0))
                 + "，核心经验差 " + signed(intValue(checkpoint, "core_xp_diff", 0)) + "。";
-        if ("disadvantage".equals(verdict)) {
+        if ("disadvantage".equals(verdict) || "major_disadvantage".equals(verdict)) {
             JsonObject insight = insight("advice:lane-core-" + slot, "improvement",
-                    "lane_execution", "medium", confidence, lane.time, 600, location,
+                    "lane_execution", "major_disadvantage".equals(verdict) ? "high" : "medium",
+                    confidence, lane.time, 600, location,
                     coreLaneIssueTitle(position), fact,
                     "补刀、等级或经验差已经达到本场对位劣势门槛。",
                     "继续高风险换血会让经验区和下一波兵线更难处理。",
                     coreLaneAction(position), "development", lane.time, slot, lane.reference);
             insight.add("dimension_impacts", impacts("lane_execution", -4.0, "survival_risk", -1.5));
+            applyLocalization(insight,
+                    PlayerReportLocalization.forLane(lane.review, lane.time, lane.reference, slot));
             insights.add(insight);
-        } else if ("advantage".equals(verdict)) {
+        } else if ("advantage".equals(verdict) || "major_advantage".equals(verdict)) {
             JsonObject insight = insight("insight:lane-core-" + slot, "strength",
                     "lane_execution", "positive", confidence, lane.time, 600, location,
                     coreLaneStrengthTitle(position), fact,
@@ -264,6 +281,8 @@ final class PlayerReportNarrativeV3 {
                     "对线优势为下一阶段的装备或节奏窗口提供了资源基础。",
                     coreLaneKeepAction(position), "development", lane.time, slot, lane.reference);
             insight.add("dimension_impacts", impacts("lane_execution", 4.0, "map_tempo", 1.5));
+            applyLocalization(insight,
+                    PlayerReportLocalization.forLane(lane.review, lane.time, lane.reference, slot));
             insights.add(insight);
         }
     }
@@ -293,13 +312,104 @@ final class PlayerReportNarrativeV3 {
                 "该窗口预计少转化约 " + farm.gain + " 金，且可能推迟下一件关键装备。",
                 farmAction(position, recommendation), "farm", time, slot, reference);
         insight.add("dimension_impacts", impacts("resource_decision", -4.0, "farm_efficiency", -2.0));
+        applyLocalization(insight, PlayerReportLocalization.forFarm(diagnostic, slot));
         insights.add(insight);
     }
 
+    private static Set<String> addCombatTimingInsights(List<JsonObject> insights, JsonObject report,
+            List<FightContext> fights, int slot, int position, int reportConfidence,
+            JsonObject evidenceIndex) {
+        Set<String> coveredFightIds = new LinkedHashSet<>();
+        JsonObject timing = object(report, "combat_timing");
+        if (timing == null) return coveredFightIds;
+
+        JsonArray factRows = array(timing, "fight_facts");
+        if (factRows != null) {
+            for (JsonElement element : factRows) {
+                if (!element.isJsonObject()) continue;
+                JsonObject fact = element.getAsJsonObject();
+                String id = stringValue(fact, "id", "");
+                if (id.isBlank() || evidenceIndex.has(id)) continue;
+                JsonObject evidence = fact.deepCopy();
+                evidence.addProperty("type", "combat_timing");
+                evidenceIndex.add(id, evidence);
+            }
+        }
+
+        JsonArray patterns = array(timing, "patterns");
+        if (patterns == null) return coveredFightIds;
+        for (JsonElement element : patterns) {
+            if (!element.isJsonObject()) continue;
+            JsonObject pattern = element.getAsJsonObject();
+            if (!booleanValue(pattern, "ordinary_eligible", false)) continue;
+            String kind = stringValue(pattern, "kind", "");
+            if (!"improvement".equals(kind) && !"strength".equals(kind)) continue;
+            JsonObject jump = object(pattern, "jump_target");
+            if (jump == null || !PlayerReportLocalization.ordinaryEligible(jump)) continue;
+
+            JsonArray occurrenceRows = array(pattern, "occurrences");
+            if (occurrenceRows != null) {
+                for (JsonElement occurrenceElement : occurrenceRows) {
+                    if (!occurrenceElement.isJsonObject()) continue;
+                    String targetFightId = stringValue(
+                            occurrenceElement.getAsJsonObject(), "fight_id", "");
+                    if (targetFightId.isBlank()) continue;
+                    coveredFightIds.add(targetFightId);
+                    fights.stream()
+                            .filter(fight -> targetFightId.equals(fightId(fight.fight)))
+                            .findFirst()
+                            .ifPresent(fight -> ensureFightEvidence(evidenceIndex, fight, slot));
+                }
+            }
+
+            int time = intValue(jump, "time", 0);
+            int start = intValue(jump, "range_start", time);
+            int end = intValue(jump, "range_end", time);
+            String region = occurrenceRows != null && !occurrenceRows.isEmpty()
+                    ? stringValue(occurrenceRows.get(0).getAsJsonObject(), "region", "unknown")
+                    : stringValue(object(jump, "map_focus"), "region", "unknown");
+            int confidence = Math.min(reportConfidence, intValue(pattern, "confidence", reportConfidence));
+            JsonObject insight = insight(
+                    "insight:" + stringValue(pattern, "id", "combat-timing"),
+                    kind,
+                    "combat_timing",
+                    "strength".equals(kind) ? "positive" : "high",
+                    confidence,
+                    start,
+                    end,
+                    regionLabel(region),
+                    stringValue(pattern, "title", "战斗时机复核"),
+                    stringValue(pattern, "what_happened", ""),
+                    stringValue(pattern, "why_it_matters", ""),
+                    stringValue(pattern, "result", ""),
+                    stringValue(pattern, "next_action", combatAction(position)),
+                    "combat",
+                    time,
+                    slot);
+            for (String key : List.of(
+                    "pattern_type", "occurrences", "item_context",
+                    "diagnostic_tags", "dimension_impacts")) {
+                copy(insight, pattern, key);
+            }
+            JsonArray evidenceRefs = array(pattern, "evidence_refs");
+            insight.add("evidence_refs",
+                    evidenceRefs == null ? new JsonArray() : evidenceRefs.deepCopy());
+            insight.addProperty("root_cause_id",
+                    stringValue(pattern, "root_cause_id",
+                            "combat-timing:" + stringValue(pattern, "id", "")));
+            insight.add("jump_target", jump.deepCopy());
+            insight.addProperty("ordinary_eligible", true);
+            insights.add(insight);
+        }
+        return coveredFightIds;
+    }
+
     private static void addCombatInsights(List<JsonObject> insights, List<FightContext> fights, int slot,
-            int position, int reportConfidence, JsonObject evidenceIndex) {
+            int position, int reportConfidence, JsonObject evidenceIndex,
+            Set<String> timingCoveredFightIds) {
         FightContext issue = fights.stream()
                 .filter(FightContext::gatePassed)
+                .filter(fight -> !timingCoveredFightIds.contains(fightId(fight.fight)))
                 .filter(fight -> fight.confidence >= 55 && fight.score < 55)
                 .min(Comparator.comparingInt(FightContext::score))
                 .orElse(null);
@@ -319,11 +429,13 @@ final class PlayerReportNarrativeV3 {
                     "队伍在这次有效接触中没有获得完整的" + positionName(position) + "职责产出。",
                     combatAction(position), "combat", issue.start, slot, issue.reference);
             insight.add("dimension_impacts", impacts("combat_duty", -5.0, "combat_output", -2.0));
+            applyLocalization(insight, PlayerReportLocalization.forFight(issue.fight, slot));
             insights.add(insight);
         }
 
         FightContext strength = fights.stream()
                 .filter(FightContext::gatePassed)
+                .filter(fight -> !timingCoveredFightIds.contains(fightId(fight.fight)))
                 .filter(fight -> fight.confidence >= 70 && fight.score >= 70)
                 .max(Comparator.comparingInt(FightContext::score))
                 .orElse(null);
@@ -343,6 +455,7 @@ final class PlayerReportNarrativeV3 {
                     "这次贡献提高了队伍有效接触中的职责完整度。",
                     combatKeepAction(position), "combat", strength.start, slot, strength.reference);
             insight.add("dimension_impacts", impacts("combat_duty", 4.0, "team", 1.5));
+            applyLocalization(insight, PlayerReportLocalization.forFight(strength.fight, slot));
             insights.add(insight);
         }
     }
@@ -362,15 +475,15 @@ final class PlayerReportNarrativeV3 {
         String key = stringValue(best, "key", "dimension");
         String source = stringValue(best, "source", "");
         JsonArray refs = array(best, "metric_refs");
-        JsonObject insight = insight("insight:aggregate:" + slot + ":" + key, "strength",
-                categoryForSource(source), "positive", reportConfidence, 0, 0, "",
-                dimensionLabel(key) + "是本场相对稳定项",
+        JsonObject insight = insight("insight:aggregate:" + slot + ":" + key, "context",
+                categoryForSource(source), "reference", reportConfidence, 0, 0, "",
+                dimensionLabel(key) + "是本场聚合参考项",
                 "该位置维度得分 " + intValue(best, "score", 0) + "，权重 "
                         + intValue(best, "weight", 0) + "%。",
                 "结论来自本场同位置职责模型的聚合事实，不代表跨比赛百分位。",
-                "这一项为本场职责完成提供了稳定基础。",
-                keepAction(position, source), moduleForSource(source), 0, slot, strings(refs));
-        insight.add("dimension_impacts", impacts(canonicalDimension(source), 2.0));
+                "该项只用于专业模式理解整体表现，不代替可定位的个人优点。",
+                "", moduleForSource(source), 0, slot, strings(refs));
+        insight.add("dimension_impacts", new JsonArray());
         insights.add(insight);
     }
 
@@ -604,10 +717,18 @@ final class PlayerReportNarrativeV3 {
     private static JsonObject brief(JsonArray stories, List<JsonObject> insights, JsonArray training,
             JsonArray dimensions, int confidence, int overall) {
         JsonObject row = new JsonObject();
-        JsonObject lane = stories.get(0).getAsJsonObject();
-        JsonObject mid = stories.get(1).getAsJsonObject();
-        JsonObject late = stories.get(2).getAsJsonObject();
-        row.addProperty("verdict", storyPhrase(lane) + "；" + storyPhrase(mid) + "，" + storyPhrase(late) + "。");
+        JsonObject firstStrength = firstStory(stories, "strength");
+        JsonObject firstIssue = firstStory(stories, "improvement");
+        StringBuilder verdict = new StringBuilder();
+        verdict.append("本场识别到 ").append(stories.size()).append(" 个可回看的重要时刻");
+        if (firstStrength != null) {
+            verdict.append("；做得好：").append(storyPhrase(firstStrength));
+        }
+        if (firstIssue != null) {
+            verdict.append("；优先复核：").append(storyPhrase(firstIssue));
+        }
+        verdict.append("。");
+        row.addProperty("verdict", verdict.toString());
         row.addProperty("next_match_focus", training.size() > 0
                 ? stringValue(training.get(0).getAsJsonObject(), "action", "")
                 : "下一局只选择一个有时间证据的职责动作练习。");
@@ -619,12 +740,12 @@ final class PlayerReportNarrativeV3 {
 
         JsonArray strengths = new JsonArray();
         insights.stream().filter(item -> "strength".equals(stringValue(item, "kind", "")))
-                .limit(2).forEach(item -> strengths.add(stringValue(item, "id", "")));
+                .forEach(item -> strengths.add(stringValue(item, "id", "")));
         row.add("strengths", strengths);
 
         JsonArray priorities = new JsonArray();
         insights.stream().filter(item -> "improvement".equals(stringValue(item, "kind", "")))
-                .limit(3).forEach(item -> priorities.add(stringValue(item, "id", "")));
+                .forEach(item -> priorities.add(stringValue(item, "id", "")));
         row.add("priorities", priorities);
 
         JsonArray trainingRefs = new JsonArray();
@@ -633,6 +754,24 @@ final class PlayerReportNarrativeV3 {
         }
         row.add("training_plan", trainingRefs);
         return row;
+    }
+
+    private static JsonObject firstStory(JsonArray stories, String kind) {
+        for (JsonElement element : stories) {
+            if (!element.isJsonObject()) continue;
+            JsonObject story = element.getAsJsonObject();
+            if (kind.equals(stringValue(story, "kind", ""))) return story;
+        }
+        return null;
+    }
+
+    private static void mergeGeneratedInsights(List<JsonObject> insights,
+            List<JsonObject> generatedInsights) {
+        Set<String> ids = new LinkedHashSet<>();
+        for (JsonObject insight : insights) ids.add(stringValue(insight, "id", ""));
+        for (JsonObject insight : generatedInsights) {
+            if (ids.add(stringValue(insight, "id", ""))) insights.add(insight);
+        }
     }
 
     private static JsonArray domainScores(JsonArray dimensions, int confidence, int overall) {
@@ -763,16 +902,17 @@ final class PlayerReportNarrativeV3 {
         }
         row.add("evidence_refs", refs);
         row.addProperty("root_cause_id", refs.size() > 0 ? refs.get(0).getAsString() : id);
-        row.add("jump_target", jumpTarget(module, jumpTime, slot));
+        applyLocalization(row, PlayerReportLocalization.aggregate(module, jumpTime, slot));
         return row;
     }
 
+    private static void applyLocalization(JsonObject insight, JsonObject jumpTarget) {
+        insight.add("jump_target", jumpTarget);
+        insight.addProperty("ordinary_eligible", PlayerReportLocalization.ordinaryEligible(jumpTarget));
+    }
+
     private static JsonObject jumpTarget(String module, int time, int slot) {
-        JsonObject row = new JsonObject();
-        row.addProperty("module", module);
-        row.addProperty("time", time);
-        row.addProperty("player_slot", slot);
-        return row;
+        return PlayerReportLocalization.aggregate(module, time, slot);
     }
 
     private static void ensureFarmEvidence(JsonObject evidenceIndex, String reference, JsonObject diagnostic,
@@ -1087,9 +1227,11 @@ final class PlayerReportNarrativeV3 {
 
     private static String storyPhrase(JsonObject story) {
         String verdict = switch (stringValue(story, "verdict", "missing")) {
+            case "major_advantage" -> "大优势";
             case "advantage" -> "占优";
             case "stable" -> "稳定";
             case "even" -> "均势";
+            case "major_disadvantage" -> "大劣势";
             case "disadvantage", "issue" -> "需要优先复核";
             default -> "证据不足";
         };
@@ -1104,8 +1246,7 @@ final class PlayerReportNarrativeV3 {
 
     private static String laneVerdict(String verdict) {
         return switch (verdict) {
-            case "advantage" -> "advantage";
-            case "disadvantage" -> "disadvantage";
+            case "major_advantage", "advantage", "major_disadvantage", "disadvantage" -> verdict;
             default -> "even";
         };
     }

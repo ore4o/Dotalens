@@ -9,4 +9,32 @@ contextBridge.exposeInMainWorld("dotaLensDesktop", Object.freeze({
       allowCreate: options.allowCreate === true,
     });
   },
+  scanReplayDirectory(directory) {
+    return ipcRenderer.invoke("dota-lens:scan-replay-directory", {
+      directory: typeof directory === "string" ? directory : "",
+    });
+  },
+  importReplayPath(options = {}) {
+    return ipcRenderer.invoke("dota-lens:import-replay-path", {
+      filePath: typeof options.filePath === "string" ? options.filePath : "",
+      matchId: typeof options.matchId === "string" ? options.matchId : "",
+      accountId: typeof options.accountId === "string" ? options.accountId : "",
+    });
+  },
+  getUpdateState() {
+    return ipcRenderer.invoke("dota-lens:update:get-state");
+  },
+  checkForUpdates() {
+    return ipcRenderer.invoke("dota-lens:update:check");
+  },
+  downloadUpdate() {
+    return ipcRenderer.invoke("dota-lens:update:download");
+  },
+  installUpdate() {
+    return ipcRenderer.invoke("dota-lens:update:install");
+  },
+  onUpdateState(callback) {
+    if (typeof callback !== "function") return;
+    ipcRenderer.on("dota-lens:update-state", (_event, state) => callback(state));
+  },
 }));

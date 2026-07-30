@@ -2,6 +2,7 @@ package opendota;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
@@ -52,7 +53,7 @@ class AnalysisSummaryTest {
 
         assertEquals("dota-lens/1.0", summary.get("schema").getAsString());
         JsonObject modules = summary.getAsJsonObject("modules");
-        assertEquals("product-modules/2.10", modules.get("schema").getAsString());
+        assertEquals("product-modules/2.11", modules.get("schema").getAsString());
         for (String module : new String[] { "snapshots", "development", "build", "farm", "laning", "vision",
                 "combat", "map", "timeline", "players", "time_contract" }) {
             assertTrue(modules.has(module), "missing product module: " + module);
@@ -73,22 +74,34 @@ class AnalysisSummaryTest {
         assertEquals(1, modules.getAsJsonObject("build").getAsJsonObject("by_slot")
                 .getAsJsonObject("0").getAsJsonArray("inventory").size());
         JsonObject playerModule = modules.getAsJsonObject("players");
-        assertEquals("player-report/3.0", playerModule.get("schema").getAsString());
+        assertEquals("player-report/4.0", playerModule.get("schema").getAsString());
         assertEquals(60.0, playerModule.getAsJsonObject("by_slot").getAsJsonObject("0")
                 .get("actions_per_min").getAsDouble());
         JsonObject report = playerModule.getAsJsonObject("by_slot").getAsJsonObject("0")
                 .getAsJsonObject("report");
-        assertEquals("player-report/3.0", report.get("model").getAsString());
+        assertEquals("player-report/4.0", report.get("model").getAsString());
         assertTrue(report.get("overall_score").getAsInt() >= 0);
         assertTrue(report.get("overall_score").getAsInt() <= 100);
+        assertTrue(report.has("base_score"));
+        assertTrue(report.has("behavior_modifier"));
+        assertEquals(report.get("final_score").getAsDouble(),
+                report.get("overall_score").getAsDouble(), 0.05);
         assertEquals(10, report.getAsJsonArray("dimensions").size());
         assertTrue(report.getAsJsonArray("phase_scores").size() > 0);
         assertTrue(report.getAsJsonArray("dimensions").get(0).getAsJsonObject()
                 .getAsJsonArray("evidence").size() > 0);
         assertEquals(10, report.getAsJsonObject("score_card").getAsJsonArray("dimensions").size());
         assertEquals(10, report.getAsJsonObject("score_card").get("dimension_target").getAsInt());
+        assertTrue(report.getAsJsonObject("score_card").getAsJsonObject("audit")
+                .get("recomputation_valid").getAsBoolean());
+        assertFalse(report.getAsJsonObject("score_card").getAsJsonObject("root_cause_summary")
+                .get("attribution_only").getAsBoolean());
         assertEquals(5, report.getAsJsonObject("brief").getAsJsonArray("domain_scores").size());
-        assertEquals(3, report.getAsJsonArray("story_nodes").size());
+        assertEquals("player-report-event-candidates/1.1",
+                report.get("event_candidate_model").getAsString());
+        assertEquals(report.getAsJsonArray("important_events").size(),
+                report.getAsJsonArray("story_nodes").size());
+        assertTrue(report.has("event_candidates"));
         assertTrue(report.getAsJsonArray("training_plan").size() > 0);
         assertTrue(report.getAsJsonObject("evidence_index").size() > 0);
         assertEquals(20, playerModule.getAsJsonObject("role_profiles").getAsJsonObject("1")
@@ -108,9 +121,54 @@ class AnalysisSummaryTest {
         for (var element : report.getAsJsonArray("dimensions")) {
             JsonObject dimension = element.getAsJsonObject();
             if (!dimension.get("available").getAsBoolean()) {
-                assertFalse(dimension.has("score"));
+                assertTrue(dimension.has("score"));
+                assertTrue(dimension.get("score").isJsonNull());
                 assertFalse(dimension.has("score_impact"));
             }
         }
+    }
+
+    @Test
+    void resolvesReplayPatchBeforeConstructingPatchScopedAnalysis() throws Exception {
+        Path raw = temporaryDirectory.resolve("9001.raw.jsonl");
+        String epilogue = """
+                {"gameInfo_":{"dota_":{"matchId_":9001,"endTime_":1782864000}}}
+                """.replace("\n", "");
+        Files.writeString(raw, String.join("\n",
+                "{\"type\":\"interval\",\"slot\":0,\"time\":0,\"event_seq\":1}",
+                "{\"type\":\"epilogue\",\"event_seq\":2,\"key\":"
+                        + new com.google.gson.Gson().toJson(epilogue) + "}",
+                ""), StandardCharsets.UTF_8);
+        JsonObject match = new JsonObject();
+        match.addProperty("match_id", 9001L);
+
+        JsonObject summary = AnalysisSummary.build(raw, match, 0L);
+
+        JsonObject resolvedMatch = summary.getAsJsonObject("match");
+        assertEquals("7.41d", resolvedMatch.get("patch_name").getAsString());
+        assertEquals("inferred", resolvedMatch.getAsJsonObject("patch_resolution")
+                .get("status").getAsString());
+        assertEquals("exact", summary.getAsJsonObject("modules")
+                .getAsJsonObject("ability_metadata").get("match").getAsString());
+    }
+
+    @Test
+    void rejectsAReplayWhoseInternalMatchIdDisagreesWithTheDeclaredId() throws Exception {
+        Path raw = temporaryDirectory.resolve("9001-mismatch.raw.jsonl");
+        String epilogue = """
+                {"gameInfo_":{"dota_":{"matchId_":9002,"endTime_":1782864000}}}
+                """.replace("\n", "");
+        Files.writeString(raw,
+                "{\"type\":\"epilogue\",\"key\":"
+                        + new com.google.gson.Gson().toJson(epilogue) + "}\n",
+                StandardCharsets.UTF_8);
+        JsonObject match = new JsonObject();
+        match.addProperty("match_id", 9001L);
+
+        ReplayIdentityException error = assertThrows(ReplayIdentityException.class,
+                () -> AnalysisSummary.build(raw, match, 0L));
+
+        assertEquals(9001L, error.declaredMatchId());
+        assertEquals(9002L, error.internalMatchId());
     }
 }

@@ -1,39 +1,444 @@
-import * as echarts from "echarts";
-import { createIcons, icons } from "lucide";
+import {
+  Activity,
+  ArrowLeft,
+  ArrowLeftRight,
+  ArrowRight,
+  ArrowUpRight,
+  BadgeCheck,
+  BookOpen,
+  BookOpenCheck,
+  Braces,
+  Building,
+  CalendarDays,
+  ChartNoAxesColumnIncreasing,
+  ChartNoAxesCombined,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  CircleAlert,
+  CircleCheck,
+  CircleDashed,
+  CircleDollarSign,
+  CircleDot,
+  CircleHelp,
+  CircleSlash,
+  CircleStop,
+  ClipboardCheck,
+  Clock3,
+  CloudDownload,
+  CloudOff,
+  Coins,
+  Construction,
+  Cpu,
+  Crosshair,
+  DatabaseZap,
+  Download,
+  Ellipsis,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  File,
+  FileArchive,
+  FileCheck,
+  FileCheck2,
+  FileDown,
+  FilePlus2,
+  FileSearch2,
+  Filter,
+  Flower2,
+  FolderCheck,
+  FolderClock,
+  FolderOpen,
+  Gamepad2,
+  Gauge,
+  GitBranch,
+  GitCompareArrows,
+  Group,
+  HeartPulse,
+  History,
+  Hourglass,
+  Info,
+  Landmark,
+  Layers3,
+  LayoutDashboard,
+  Link,
+  List,
+  ListChecks,
+  ListFilter,
+  ListTree,
+  ListX,
+  LoaderCircle,
+  LocateFixed,
+  Map as MapIcon,
+  MapPin,
+  Maximize2,
+  Milestone,
+  Minimize2,
+  Minus,
+  MonitorX,
+  MousePointer2,
+  MousePointerClick,
+  MoveUpRight,
+  Navigation,
+  Newspaper,
+  PackageOpen,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Pause,
+  Percent,
+  Play,
+  PlayCircle,
+  PlugZap,
+  Plus,
+  Radar,
+  RefreshCw,
+  RotateCw,
+  Route,
+  RouteOff,
+  Scale,
+  Scan,
+  ScanEye,
+  ScanLine,
+  ScanSearch,
+  Scroll,
+  Search,
+  SearchCheck,
+  Send,
+  Settings,
+  Settings2,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  ShieldOff,
+  ShoppingBag,
+  SkipBack,
+  SkipForward,
+  Skull,
+  SlidersHorizontal,
+  Sparkles,
+  Square,
+  Stethoscope,
+  Swords,
+  Table,
+  Target,
+  Timeline,
+  Timer,
+  TimerOff,
+  Trees,
+  Type,
+  UserRound,
+  UserRoundSearch,
+  Users,
+  Watch,
+  Wheat,
+  WifiOff,
+  X,
+  Zap,
+  ZoomIn,
+  ZoomOut,
+  createIcons,
+} from "lucide";
 import { GAME_MODES_ZH, heroMeta } from "./hero-meta.js";
 import { OFFICIAL_ABILITY_NAMES_ZH, OFFICIAL_ITEM_NAMES_ZH } from "./dota-localization.generated.js";
+import {
+  activeTaskFromHistory,
+  aggregateCombatContributions,
+  buildMatchListFailureReport,
+  buildParseFailureReport,
+  buildCombatContributionRoster,
+  buildSimplePlayerReport,
+  combatContributionChartModel,
+  combatContributionDrilldown,
+  combatVisionStatus,
+  countPlayerLaneWaves,
+  createReadingModeController,
+  createMatchCache,
+  coverageImpactFor,
+  filterCombatContributionFights,
+  formatCountdownSeconds,
+  matchHistoryGuidance,
+  matchListFailureGuidance,
+  normalizeMatchCache,
+  normalizeMatchSubject,
+  normalizePlayerReportInsightOccurrences,
+  normalizePlayerReportJumpTarget,
+  normalizePlayerStoryVerdict,
+  normalizeTaskHistory,
+  patchCoverageImpact,
+  patchResolutionLabel,
+  parseFailureGuidance,
+  playerReportUpgradeState,
+  presentSimpleInsight,
+  recomputePlayerReportScoreAudit,
+  resolveMatchListFailure,
+  resolvePlayerReportReviewNavigation,
+  resourceClockPatchLabel,
+  selectedPlayerIndex,
+  simplifyPlayerReportText,
+  upsertTaskHistory,
+} from "./app-core.js";
+import {
+  combatContributionChartOption,
+  combatResponsibilityRadarOption,
+} from "./combat-contribution-chart.js";
+import {
+  combatContributionAuditScrollTarget,
+  combatContributionAccessibleMarkup,
+  combatDimensionDetailMarkup,
+  combatContributionLabelMarkup,
+  combatContributionSampleLabel,
+  combatScoreComponentsMarkup,
+} from "./combat-contribution-view.js";
+import { renderPlayerScoreAtomicAudit } from "./player-score-atomic-audit.js";
+import {
+  createPreviewUpdateState,
+  createUpdateViewModel,
+} from "./update-ui.js";
+import {
+  MATCH_LIMIT_STORAGE_KEY,
+  normalizeMatchLimit,
+  playerMatchesPath,
+} from "./match-list-preferences.js";
 
 const API_BASE = "http://127.0.0.1:5600/api";
+const APP_VERSION = "0.5.1";
+const HERO_FALLBACK_IMAGE = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 36"><rect width="64" height="36" rx="4" fill="#252b2e"/><circle cx="32" cy="13" r="7" fill="#879296"/><path d="M17 35c1-9 7-14 15-14s14 5 15 14" fill="#879296"/></svg>',
+)}`;
+const APP_ICONS = {
+  Activity,
+  ArrowLeft,
+  ArrowLeftRight,
+  ArrowRight,
+  ArrowUpRight,
+  BadgeCheck,
+  BookOpen,
+  BookOpenCheck,
+  Braces,
+  Building,
+  CalendarDays,
+  ChartNoAxesColumnIncreasing,
+  ChartNoAxesCombined,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  CircleAlert,
+  CircleCheck,
+  CircleDashed,
+  CircleDollarSign,
+  CircleDot,
+  CircleHelp,
+  CircleSlash,
+  CircleStop,
+  ClipboardCheck,
+  Clock3,
+  CloudDownload,
+  CloudOff,
+  Coins,
+  Construction,
+  Cpu,
+  Crosshair,
+  DatabaseZap,
+  Download,
+  Ellipsis,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  File,
+  FileArchive,
+  FileCheck,
+  FileCheck2,
+  FileDown,
+  FilePlus2,
+  FileSearch2,
+  Filter,
+  Flower2,
+  FolderCheck,
+  FolderClock,
+  FolderOpen,
+  Gamepad2,
+  Gauge,
+  GitBranch,
+  GitCompareArrows,
+  Group,
+  HeartPulse,
+  History,
+  Hourglass,
+  Info,
+  Landmark,
+  Layers3,
+  LayoutDashboard,
+  Link,
+  List,
+  ListChecks,
+  ListFilter,
+  ListTree,
+  ListX,
+  LoaderCircle,
+  LocateFixed,
+  Map: MapIcon,
+  MapPin,
+  Maximize2,
+  Milestone,
+  Minimize2,
+  Minus,
+  MonitorX,
+  MousePointer2,
+  MousePointerClick,
+  MoveUpRight,
+  Navigation,
+  Newspaper,
+  PackageOpen,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Pause,
+  Percent,
+  Play,
+  PlayCircle,
+  PlugZap,
+  Plus,
+  Radar,
+  RefreshCw,
+  RotateCw,
+  Route,
+  RouteOff,
+  Scale,
+  Scan,
+  ScanEye,
+  ScanLine,
+  ScanSearch,
+  Scroll,
+  Search,
+  SearchCheck,
+  Send,
+  Settings,
+  Settings2,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  ShieldOff,
+  ShoppingBag,
+  SkipBack,
+  SkipForward,
+  Skull,
+  SlidersHorizontal,
+  Sparkles,
+  Square,
+  Stethoscope,
+  Swords,
+  Table,
+  Target,
+  Timeline,
+  Timer,
+  TimerOff,
+  Trees,
+  Type,
+  UserRound,
+  UserRoundSearch,
+  Users,
+  Watch,
+  Wheat,
+  WifiOff,
+  X,
+  Zap,
+  ZoomIn,
+  ZoomOut,
+};
+let chartRuntimePromise = null;
+let combatChartResizeObserver = null;
+
+function loadChartRuntime() {
+  if (!chartRuntimePromise) {
+    chartRuntimePromise = import("./chart-runtime.js");
+  }
+  return chartRuntimePromise;
+}
+
+function setupCombatChartResizeObserver() {
+  if (combatChartResizeObserver || !("ResizeObserver" in window)) return;
+  const contribution = document.querySelector("#combat-contribution-chart");
+  const radar = document.querySelector("#combat-responsibility-radar");
+  combatChartResizeObserver = new ResizeObserver((entries) => {
+    entries.forEach((entry) => {
+      if (entry.contentRect.width < 2 || entry.contentRect.height < 2) return;
+      if (entry.target === contribution) {
+        if (state.combatContributionChart) state.combatContributionChart.resize();
+        else if (state.combatContributionChartModel) {
+          void renderCombatContributionChart(state.combatContributionChartModel);
+        }
+      }
+      if (entry.target === radar) {
+        if (state.combatResponsibilityRadar) state.combatResponsibilityRadar.resize();
+        else if (state.combatResponsibilityRadarModel) {
+          void renderCombatResponsibilityRadar(state.combatResponsibilityRadarModel);
+        }
+      }
+    });
+  });
+  if (contribution) combatChartResizeObserver.observe(contribution);
+  if (radar) combatChartResizeObserver.observe(radar);
+  window.addEventListener("beforeunload", () => {
+    combatChartResizeObserver?.disconnect();
+    combatChartResizeObserver = null;
+  }, { once: true });
+}
 const APP_PARAMS = new URLSearchParams(window.location.search);
 const PREVIEW_VIEW = APP_PARAMS.get("preview");
+const PREVIEW_DETAIL_VIEW = {
+  timeline: "map",
+  coverage: "player-score",
+}[PREVIEW_VIEW] || PREVIEW_VIEW;
 const PREVIEW_MATCH_ID = /^\d+$/.test(APP_PARAMS.get("qaMatch") || "") ? APP_PARAMS.get("qaMatch") : null;
 const PREVIEW_SCOREBOARD_STRESS = APP_PARAMS.get("scoreboardStress") === "1";
 const PREVIEW_SETTINGS_PANEL = APP_PARAMS.get("settingsPanel") || "dota";
+const PREVIEW_UPDATE_STATE = APP_PARAMS.get("updateState");
+const PREVIEW_READING_MODE = ["simple", "professional"].includes(APP_PARAMS.get("readingMode"))
+  ? APP_PARAMS.get("readingMode") : null;
 const DEFAULT_ACCOUNT_ID = window.localStorage.getItem("dota-lens-account-id") || "";
 const DIRECTORY_SETTINGS_KEY = "dota-lens-directory-settings-v1";
-const PLAYER_SCORE_MODE_KEY = "dota-lens-player-score-mode-v3";
+const READING_MODE_KEY = "dota-lens-reading-mode-v1";
 const SIDEBAR_STATE_KEY = "dota-lens-sidebar-collapsed-v1";
 const WARD_TIMELINE_STATE_KEY = "dota-lens-ward-timeline-collapsed-v1";
+const TASK_HISTORY_KEY = "dota-lens-task-history-v1";
+const MATCH_CACHE_KEY_PREFIX = "dota-lens-match-cache-v1";
 const WARD_MAP_ZOOM_MIN = 1;
 const WARD_MAP_ZOOM_MAX = 4;
 const WARD_MAP_ZOOM_FACTOR = 1.22;
-const DEFAULT_PLAYER_SCORE_MODE = window.localStorage.getItem(PLAYER_SCORE_MODE_KEY) === "deep" ? "deep" : "brief";
 const SAVED_SIDEBAR_STATE = window.localStorage.getItem(SIDEBAR_STATE_KEY);
+const SAVED_MATCH_LIMIT = normalizeMatchLimit(window.localStorage.getItem(MATCH_LIMIT_STORAGE_KEY));
 const DEFAULT_SIDEBAR_COLLAPSED = SAVED_SIDEBAR_STATE == null
   ? window.matchMedia("(max-width: 1279px)").matches
   : SAVED_SIDEBAR_STATE === "1";
-const REAL_ANALYSIS_VIEWS = new Set(["development", "farm", "map", "vision", "build", "combat", "timeline", "player-score", "players", "coverage"]);
+
+function readStoredJson(key, fallback = null) {
+  try {
+    const value = window.localStorage.getItem(key);
+    return value ? JSON.parse(value) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeStoredJson(key, value) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const SAVED_TASK_HISTORY = normalizeTaskHistory(readStoredJson(TASK_HISTORY_KEY, []));
+const REAL_ANALYSIS_VIEWS = new Set(["development", "farm", "map", "vision", "build", "combat", "player-score", "players"]);
 const ANALYSIS_MODULES_BY_VIEW = {
-  development: ["farm"],
+  development: ["snapshots"],
   farm: ["farm", "vision"],
   map: ["farm", "vision", "combat"],
   vision: ["vision"],
   build: ["build"],
   combat: ["combat", "vision"],
-  timeline: ["timeline"],
-  "player-score": ["laning", "farm", "combat", "vision", "build", "timeline", "map"],
-  players: [],
-  coverage: [],
+  "player-score": ["players", "laning", "farm", "combat", "vision", "build", "timeline", "map"],
+  players: ["players"],
 };
 let MATCH_DURATION = 2280;
 let MATCH_START_MS = 0;
@@ -501,7 +906,7 @@ const AEGIS_STATE_NAMES = {
 };
 
 const state = {
-  page: "matches",
+  page: "help",
   sidebarCollapsed: DEFAULT_SIDEBAR_COLLAPSED,
   wardSideView: "list",
   wardTimelineCollapsed: window.localStorage.getItem(WARD_TIMELINE_STATE_KEY) === "1",
@@ -511,14 +916,20 @@ const state = {
   playerScoreEvidenceOpen: false,
   playerReportView: "facts",
   accountId: DEFAULT_ACCOUNT_ID,
+  matchLimit: SAVED_MATCH_LIMIT,
   matches: [],
   matchesStatus: "idle",
   matchesError: "",
+  matchesErrorCode: "",
+  matchesOffline: false,
+  matchesAvailability: null,
+  matchesFetchedAt: null,
   parserOnline: false,
+  parserStatus: null,
   currentMatch: null,
   currentAnalysis: null,
-  activeJob: null,
-  taskHistory: [],
+  activeJob: activeTaskFromHistory(SAVED_TASK_HISTORY),
+  taskHistory: SAVED_TASK_HISTORY,
   jobPollTimer: null,
   parserPollTimer: null,
   detailView: "development",
@@ -526,16 +937,21 @@ const state = {
   eventFilter: "all",
   segmentFilter: "all",
   settingsPanel: "account",
+  updateState: createPreviewUpdateState("development", APP_VERSION),
   selectedHeroSlot: 0,
-  playerScoreMode: DEFAULT_PLAYER_SCORE_MODE,
+  readingMode: "simple",
+  simpleReportFilter: "all",
   playerScoreSection: "overview",
   playerScoreRosterFilter: "all",
   selectedPlayerScoreEvidence: null,
+  playerReportReviewWindow: null,
   selectedSegmentId: "seg-7",
   selectedCombatId: "fight-2",
   selectedCombatPlayerSlot: 0,
   selectedWardId: "ward-07",
   selectedFarmDiagnosticId: "farm-d3",
+  selectedBuildEventId: null,
+  selectedMapEventId: null,
   farmTimeWindow: "pre20",
   farmSource: "all",
   farmTeam: "winner",
@@ -563,9 +979,39 @@ const state = {
   developmentSideView: "lane",
   combatInspectorView: "audit",
   combatFilter: "all",
+  combatContributionScope: "current",
+  combatContributionMetric: "responsibility",
+  combatContributionChart: null,
+  combatContributionChartModel: null,
+  combatResponsibilityRadar: null,
+  combatResponsibilityRadarModel: null,
+  combatResponsibilityRadarRenderToken: 0,
+  selectedCombatContributionDimension: "responsibility",
+  combatContributionRenderToken: 0,
   selectedCombatPhase: "clash",
   pendingMatch: null,
+  pendingSubjectAnalysis: null,
+  pendingSubjectMatch: null,
+  pendingSubjectSlot: null,
+  pendingSubjectRequired: false,
 };
+
+const readingModeController = createReadingModeController({
+  storage: window.localStorage,
+  storageKey: READING_MODE_KEY,
+  getControls: () => document.querySelectorAll("[data-reading-mode]"),
+  applyMode: (mode) => {
+    state.readingMode = mode;
+    document.body.dataset.readingMode = mode;
+  },
+  render: () => {
+    if (state.page === "detail") renderDetailView(state.detailView);
+  },
+});
+
+function setReadingMode(mode, options = {}) {
+  return readingModeController.set(mode, options);
+}
 
 const wardMapDrag = {
   active: false,
@@ -660,6 +1106,38 @@ function setCombatCompactView(view) {
   });
   if (state.combatCompactView === "events") setCombatInspectorView("events");
   if (state.combatCompactView === "audit") setCombatInspectorView("audit");
+  if (state.combatCompactView === "contribution" && state.combatContributionChartModel) {
+    window.requestAnimationFrame(() => {
+      if (state.combatContributionChart) state.combatContributionChart.resize();
+      else void renderCombatContributionChart(state.combatContributionChartModel);
+    });
+  }
+  if (state.combatCompactView === "audit" && state.combatResponsibilityRadarModel) {
+    window.requestAnimationFrame(() => {
+      if (state.combatResponsibilityRadar) state.combatResponsibilityRadar.resize();
+      else void renderCombatResponsibilityRadar(state.combatResponsibilityRadarModel);
+    });
+  }
+}
+
+function focusCombatAudit(action) {
+  const target = combatContributionAuditScrollTarget(action);
+  if (target === "preserve") return;
+  window.requestAnimationFrame(() => {
+    const pane = document.querySelector("#combat-audit-pane");
+    if (!pane) return;
+    if (target === "top") {
+      pane.scrollTo({ top: 0, behavior: "auto" });
+      return;
+    }
+    const detail = document.querySelector("#combat-dimension-detail");
+    if (!detail) return;
+    const offset = pane.scrollTop
+      + detail.getBoundingClientRect().top
+      - pane.getBoundingClientRect().top
+      - 8;
+    pane.scrollTo({ top: Math.max(0, offset), behavior: "smooth" });
+  });
 }
 
 function setPlayerScoreEvidenceOpen(open) {
@@ -720,7 +1198,8 @@ const TIMELINE_EVENTS = Array.from({ length: 1000 }, (_, index) => {
 });
 
 function heroImage(token) {
-  return `/assets/heroes/${token}.png`;
+  const normalized = /^[a-z0-9_]+$/.test(String(token || "")) ? String(token) : "unknown";
+  return normalized === "unknown" ? HERO_FALLBACK_IMAGE : `/assets/heroes/${normalized}.png`;
 }
 
 function itemImage(key) {
@@ -974,9 +1453,11 @@ const PLAYER_SCORE_DOMAIN_META = {
 };
 
 const PLAYER_SCORE_BRIEF_VERDICT_META = {
+  major_advantage: { label: "大优势", className: "positive" },
   advantage: { label: "优势", className: "positive" },
   even: { label: "均势", className: "stable" },
   disadvantage: { label: "承压", className: "negative" },
+  major_disadvantage: { label: "大劣势", className: "negative" },
   stable: { label: "表现稳定", className: "positive" },
   issue: { label: "问题集中", className: "negative" },
   missing: { label: "证据不足", className: "missing" },
@@ -1039,6 +1520,16 @@ function normalizeTimedEvent(event, fallbackSeconds = 0) {
   return { ...event, time: timeMs / 1000, timeMs };
 }
 
+function purchaseEventId(event, slot = state.selectedHeroSlot) {
+  if (event?.id) return String(event.id);
+  return `purchase-${Number(slot)}-${Math.round(Number(event?.time || 0))}-${String(event?.key || "unknown")}-${Number(event?.event_seq || 0)}`;
+}
+
+function objectiveEventId(event) {
+  if (event?.id) return String(event.id);
+  return `objective-${Math.round(Number(event?.time || 0))}`;
+}
+
 function compactNumber(value) {
   if (Math.abs(value) >= 1000) return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k`;
   return String(Math.round(value));
@@ -1049,7 +1540,7 @@ function clamp(value, min, max) {
 }
 
 function refreshIcons(root = document) {
-  createIcons({ icons, attrs: { "aria-hidden": "true" }, root });
+  createIcons({ icons: APP_ICONS, attrs: { "aria-hidden": "true" }, root });
 }
 
 function showToast(title, detail = "", icon = "circle-check") {
@@ -1116,6 +1607,7 @@ async function chooseSettingsDirectory(button) {
 
 const TASK_STAGE_META = {
   queued: ["等待解析", "任务已进入本地单任务队列"],
+  importing_replay: ["导入 Replay", "正在把参赛者本机 Replay 写入本地解析缓存"],
   resolving: ["读取比赛", "正在确认比赛信息和 Replay 地址"],
   requesting_replay: ["请求 Replay", "OpenDota 尚无地址，正在提交公开解析请求"],
   waiting_replay: ["等待 Replay", "等待 OpenDota 返回 Replay 下载信息"],
@@ -1155,15 +1647,26 @@ const COVERAGE_SOURCE_ZH = {
 };
 
 const TASK_ERROR_MESSAGES = {
+  network_access_denied: "本地解析器的联网权限被阻止，无法访问 OpenDota 或 Replay 下载服务。",
+  network_unavailable: "当前网络或公开服务不可用，请稍后重试或导入本机 Replay。",
   replay_unavailable: "OpenDota 暂时没有这场比赛的 Replay 地址，请稍后重试。",
   replay_server_unavailable: "Valve Replay 下载服务持续不可用，自动重试窗口已用尽，可稍后重新解析。",
   rate_limited: "OpenDota 请求过于频繁，请稍后再试。",
   parse_incomplete: "Replay 没有完整结束标记，无法生成可信报告。",
   replay_corrupt: "Replay 文件损坏或下载不完整，请重新解析。",
+  replay_match_id_mismatch: "录像内部比赛 ID 与导入时填写的 ID 不一致。缓存副本已移除，请按录像内部 ID 重命名后重新导入。",
   parse_failed: "本地解析失败，请查看解析器日志。",
   request_failed: "无法创建本地解析任务，请检查解析器连接。",
   request_timeout: "本地服务请求超时；任务可能仍在运行，请到任务页查看或取消。",
+  job_not_found: "上次任务已中断或本地解析器已重启；Replay 缓存仍可用于重新解析。",
 };
+
+function taskErrorMessage(job = {}) {
+  return parseFailureGuidance(job).detail
+    || TASK_ERROR_MESSAGES[job.error_code]
+    || job.message
+    || "本地解析失败，请查看解析器日志。";
+}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -1196,6 +1699,37 @@ function formatBytes(value) {
   return `${(bytes / 1024).toFixed(0)} KB`;
 }
 
+async function writeClipboardText(value) {
+  const text = String(value || "");
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      // Electron and local previews may deny the Clipboard API; use the DOM fallback.
+    }
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  if (!copied) throw new Error("clipboard_unavailable");
+}
+
+async function copyFeedback(value, successDetail = "可直接粘贴给开发者") {
+  try {
+    await writeClipboardText(value);
+    showToast("反馈信息已复制", successDetail, "clipboard-check");
+  } catch {
+    showToast("复制失败", "当前系统未开放剪贴板权限，请在设置中导出诊断信息", "circle-alert");
+  }
+}
+
 async function apiFetch(path, options = {}) {
   const { timeout = 60000, body, ...requestOptions } = options;
   const controller = new AbortController();
@@ -1213,6 +1747,7 @@ async function apiFetch(path, options = {}) {
       const error = new Error(payload.message || `本地服务返回 HTTP ${response.status}`);
       error.code = payload.error;
       error.status = response.status;
+      error.context = payload.error_context || null;
       throw error;
     }
     return payload;
@@ -1265,27 +1800,47 @@ function analysisModuleAvailable(analysis, moduleName) {
 }
 
 async function fetchAnalysisModules(analysis, matchId, moduleNames) {
-  if (!analysis?.modules) return false;
+  if (!analysis?.modules) return { changed: false, loaded: [], failures: [] };
   const missing = [...new Set(moduleNames)].filter((name) => !analysis.modules[name]
     && analysisModuleAvailable(analysis, name));
-  if (!missing.length) return false;
-  await Promise.all(missing.map(async (name) => {
+  if (!missing.length) return { changed: false, loaded: [], failures: [] };
+  const settled = await Promise.allSettled(missing.map(async (name) => {
     const key = `${matchId}:${analysis.generated_at || "current"}:${name}`;
     let request = state.analysisModuleLoads.get(key);
     if (!request) {
-      request = apiFetch(`/matches/${matchId}/analysis/modules/${name}`, { timeout: 60000 });
+      request = apiFetch(`/matches/${matchId}/analysis/modules/${name}`, { timeout: 60000 })
+        .catch((error) => {
+          state.analysisModuleLoads.delete(key);
+          throw error;
+        });
       state.analysisModuleLoads.set(key, request);
     }
-    analysis.modules[name] = await request;
+    return { name, value: await request };
   }));
+  const loaded = [];
+  const failures = [];
+  analysis.module_load_errors ||= {};
+  settled.forEach((result, index) => {
+    const name = missing[index];
+    if (result.status === "fulfilled") {
+      analysis.modules[name] = result.value.value;
+      delete analysis.module_load_errors[name];
+      loaded.push(name);
+      return;
+    }
+    analysis.module_load_errors[name] = result.reason?.message || "模块读取失败";
+    failures.push({ name, error: result.reason });
+  });
   normalizeAnalysisSnapshots(analysis);
-  return true;
+  return { changed: loaded.length > 0, loaded, failures };
 }
 
 function normalizeMatch(raw) {
   const hero = heroMeta(raw.hero_id);
   const isRadiant = Number(raw.player_slot) < 128;
-  const win = isRadiant ? Boolean(raw.radiant_win) : !Boolean(raw.radiant_win);
+  const win = typeof raw.radiant_win === "boolean"
+    ? (isRadiant ? raw.radiant_win : !raw.radiant_win)
+    : null;
   const status = raw.local_status || (raw.version == null ? "basic" : "available");
   return {
     id: String(raw.match_id),
@@ -1319,6 +1874,49 @@ function validAccountId(value) {
   }
 }
 
+function matchCacheKey(accountId) {
+  return `${MATCH_CACHE_KEY_PREFIX}:${String(accountId)}`;
+}
+
+function readCachedMatches(accountId) {
+  return normalizeMatchCache(readStoredJson(matchCacheKey(accountId)), accountId);
+}
+
+function persistMatchPayload(accountId, matches, fetchedAt) {
+  if (!validAccountId(String(accountId)) || !Array.isArray(matches) || !matches.length) return false;
+  return writeStoredJson(matchCacheKey(accountId), createMatchCache(accountId, matches, fetchedAt));
+}
+
+function persistCurrentMatchesCache() {
+  if (!validAccountId(state.accountId) || !state.matches.length) return false;
+  const rawMatches = state.matches.map((match) => ({
+    ...(match.raw || {}),
+    match_id: Number(match.id),
+    local_status: match.status,
+    local_job: match.localJob || null,
+    local_analysis: match.status === "full",
+  }));
+  return persistMatchPayload(state.accountId, rawMatches, state.matchesFetchedAt);
+}
+
+function syncMatchLimitControls() {
+  document.querySelectorAll("#match-limit-input, #settings-match-limit").forEach((input) => {
+    input.value = String(state.matchLimit);
+  });
+  const rangeLabel = document.querySelector("#account-match-range-label");
+  if (rangeLabel) rangeLabel.textContent = `最多 ${state.matchLimit} 场`;
+  document.querySelectorAll("[data-match-limit-copy]").forEach((copy) => {
+    copy.textContent = `本地解析器会读取该账号最近最多 ${state.matchLimit} 场比赛，并标出可自动解析的场次。`;
+  });
+}
+
+function setMatchLimit(value, { persist = true } = {}) {
+  state.matchLimit = normalizeMatchLimit(value, state.matchLimit);
+  if (persist) window.localStorage.setItem(MATCH_LIMIT_STORAGE_KEY, String(state.matchLimit));
+  syncMatchLimitControls();
+  return state.matchLimit;
+}
+
 function updateAccountChrome() {
   const connected = state.matchesStatus === "ready";
   const accountId = state.accountId;
@@ -1329,9 +1927,13 @@ function updateAccountChrome() {
     : "--";
   document.querySelector("#sidebar-account-id").textContent = connected ? accountId : "未连接账号";
   document.querySelector("#sidebar-account-avatar").textContent = connected ? accountId.slice(-2) : "--";
-  document.querySelector("#sidebar-account-detail").textContent = connected ? "最近比赛已同步" : "输入 Steam 数字 ID";
+  document.querySelector("#sidebar-account-detail").textContent = connected
+    ? state.matchesOffline ? "正在使用本地比赛缓存" : "最近比赛已同步"
+    : "输入 Dota 2 游戏 ID";
   if (state.page === "matches") {
-    document.querySelector("#page-context").textContent = connected ? `账号 ${accountId} · OpenDota 最近比赛` : "等待连接账号";
+    document.querySelector("#page-context").textContent = connected
+      ? `账号 ${accountId} · ${state.matchesOffline ? "离线缓存" : "OpenDota 最近比赛"}`
+      : "等待连接账号";
   }
 }
 
@@ -1370,7 +1972,9 @@ async function checkParserStatus({ retries = 1 } = {}) {
     try {
       const status = await apiFetch("/status", { timeout: 3500 });
       if (status.status !== "ready") throw new Error("本地解析器尚未就绪");
+      state.parserStatus = status;
       setParserStatus(true, `就绪 · v${status.version}`);
+      renderDiagnostics();
       return true;
     } catch {
       if (attempt < retries) {
@@ -1378,20 +1982,26 @@ async function checkParserStatus({ retries = 1 } = {}) {
       }
     }
   }
+  state.parserStatus = null;
   setParserStatus(false);
+  renderDiagnostics();
   return false;
 }
 
 async function loadMatches(accountId = state.accountId, options = {}) {
   const normalized = String(accountId).trim();
   if (!validAccountId(normalized)) {
-    showToast("账号格式不正确", "请输入 1 到 10 位 Steam 数字 ID", "circle-alert");
+    showToast("账号格式不正确", "请输入 1 到 10 位 Dota 2 游戏 ID", "circle-alert");
     document.querySelector("#account-id-input").focus();
     return;
   }
+  const matchLimit = setMatchLimit(options.limit ?? state.matchLimit);
   state.accountId = normalized;
   state.matchesStatus = "loading";
   state.matchesError = "";
+  state.matchesErrorCode = "";
+  state.matchesOffline = false;
+  state.matchesAvailability = null;
   renderMatches();
   updateAccountChrome();
   const lookupButton = document.querySelector("#account-lookup-button");
@@ -1399,19 +2009,56 @@ async function loadMatches(accountId = state.accountId, options = {}) {
   lookupButton.innerHTML = `<i data-lucide="loader-circle"></i><span>读取中</span>`;
   refreshIcons(lookupButton);
   try {
-    const payload = await apiFetch(`/players/${normalized}/matches`);
-    state.matches = (payload.matches || []).map(normalizeMatch);
+    const payload = await apiFetch(playerMatchesPath(normalized, matchLimit));
+    const confirmedLimit = normalizeMatchLimit(payload.requested_limit, matchLimit);
+    setMatchLimit(confirmedLimit);
+    state.matches = (payload.matches || []).slice(0, confirmedLimit).map(normalizeMatch);
+    state.matchesAvailability = payload.availability || null;
     state.matchesStatus = "ready";
+    state.matchesErrorCode = "";
+    state.matchesOffline = false;
+    state.matchesFetchedAt = payload.fetched_at || new Date().toISOString();
     window.localStorage.setItem("dota-lens-account-id", normalized);
+    persistMatchPayload(normalized, payload.matches || [], state.matchesFetchedAt);
     document.querySelector("#background-status").textContent = `最近同步：${formatGeneratedAt(payload.fetched_at)}`;
     updateAccountChrome();
     updateMatchSummary();
     renderMatches();
-    if (!options.silent) showToast("比赛列表已更新", `读取到 ${state.matches.length} 场最近比赛`, "list-checks");
+    if (!options.silent) {
+      if (state.matches.length) {
+        showToast("比赛列表已更新", `读取到 ${state.matches.length} 场最近比赛`, "list-checks");
+      } else {
+        const guidance = matchHistoryGuidance(state.matchesAvailability);
+        showToast(guidance.title, "可导入账号本人在 Dota 2 客户端下载的 Replay", "shield-alert");
+      }
+    }
   } catch (error) {
+    const cached = readCachedMatches(normalized);
+    const fallback = resolveMatchListFailure(cached, normalized, error.message || "OpenDota 暂时不可用");
+    const parserAvailable = await checkParserStatus({ retries: 0 });
+    if (fallback.offline) {
+      state.matches = fallback.matches.slice(0, matchLimit).map(normalizeMatch);
+      state.matchesStatus = fallback.status;
+      state.matchesOffline = true;
+      state.matchesAvailability = null;
+      state.matchesFetchedAt = fallback.fetchedAt;
+      state.matchesError = fallback.error;
+      state.matchesErrorCode = error.code || "match_list_failed";
+      document.querySelector("#background-status").textContent = `离线缓存：${formatGeneratedAt(fallback.savedAt)}`;
+      if (parserAvailable) setParserStatus(true, "就绪 · 当前使用比赛缓存");
+      updateAccountChrome();
+      updateMatchSummary();
+      renderMatches();
+      if (!options.silent) {
+        showToast("已切换到离线比赛列表", `${state.matches.length} 场缓存比赛可用，本地 Replay 不受影响`, "cloud-off");
+      }
+      return;
+    }
     state.matches = [];
     state.matchesStatus = "error";
-    const parserAvailable = await checkParserStatus({ retries: 0 });
+    state.matchesOffline = false;
+    state.matchesAvailability = null;
+    state.matchesErrorCode = error.code || "match_list_failed";
     if (parserAvailable && error.code === "opendota_unavailable") {
       state.matchesError = `本地解析器已就绪，但 OpenDota 暂时无法连接：${error.message}`;
       setParserStatus(true, "就绪 · OpenDota 暂不可用");
@@ -1513,6 +2160,9 @@ function hydrateSelectedHeroModules(slot = state.selectedHeroSlot) {
   const build = modules.build?.by_slot?.[key] || {};
   replaceArray(ITEM_EVENTS, (build.purchases || []).map((event) => ({ ...normalizeTimedEvent(event), action: eventTimeMs(event) <= 0 ? "初始装备" : "购买" })));
   replaceArray(ABILITY_EVENTS, (build.abilities || []).map((event) => ({ ...normalizeTimedEvent(event), level: event.value, name: abilityName(event.key) })));
+  if (!ITEM_EVENTS.some((event) => purchaseEventId(event, slot) === state.selectedBuildEventId)) {
+    state.selectedBuildEventId = null;
+  }
 
   replaceArray(FARM_HEAT_CELLS, (modules.farm?.heat_cells_by_slot?.[key] || []).map((cell) => ({ ...cell, region: regionName(cell.region) })));
   const anomalyRows = modules.farm?.anomalies_by_slot?.[key] || [];
@@ -1547,6 +2197,19 @@ function hydrateAnalysisModules(analysis) {
   normalizeAnalysisSnapshots(analysis);
   const modules = analysis?.modules;
   if (!modules) throw new Error("分析包缺少产品模块，请重新解析这场比赛");
+  const playerFactsBySlot = modules.players?.by_slot || {};
+  HEROES.forEach((hero, slot) => {
+    const playerFacts = playerFactsBySlot[String(slot)];
+    if (!playerFacts) return;
+    const laning = modules.laning?.positions_by_slot?.[String(slot)] || {};
+    hero.taken = Number(playerFacts.damage_taken) || 0;
+    hero.vision = Number(playerFacts.vision_score) || 0;
+    hero.position = Number(playerFacts.position || laning.position) || hero.position;
+    hero.lane = laning.lane || hero.lane || "unknown";
+    hero.roleConfidence = Number(playerFacts.role_confidence || laning.confidence) || hero.roleConfidence || 0;
+    hero.facts = playerFacts;
+    hero.report = playerFacts.report || null;
+  });
   state.snapshotCache.clear();
   Object.entries(modules.snapshots || {}).forEach(([slot, rows]) => state.snapshotCache.set(Number(slot), rows));
 
@@ -1629,6 +2292,9 @@ function hydrateAnalysisModules(analysis) {
     x: event.x == null ? null : Number(event.x),
     y: event.y == null ? null : Number(event.y),
   })));
+  if (!OBJECTIVE_EVENTS.some((event) => objectiveEventId(event) === state.selectedMapEventId)) {
+    state.selectedMapEventId = null;
+  }
   replaceArray(ROSHAN_ATTEMPTS, (modules.objectives?.roshan_attempts || []).map((attempt) => ({
     ...attempt,
     start: Number(attempt.start_ms ?? attempt.start * 1000) / 1000,
@@ -1746,6 +2412,18 @@ function regionForPosition(position) {
   return "河道交汇区";
 }
 
+function renderMatchTroubleshootingChecks(checks = []) {
+  return `<ol class="match-troubleshooting-list">${checks.map((check, index) => `
+    <li>
+      <span class="troubleshooting-index">${index + 1}</span>
+      <span>
+        <strong>${escapeHtml(check.title)}</strong>
+        <small>${escapeHtml(check.detail)}</small>
+      </span>
+    </li>
+  `).join("")}</ol>`;
+}
+
 function renderMatches() {
   const list = document.querySelector("#matches-list");
   const resultCount = document.querySelector("#match-result-count");
@@ -1755,14 +2433,50 @@ function renderMatches() {
     return;
   }
   if (state.matchesStatus === "error") {
-    list.innerHTML = `<div class="match-empty-state"><span class="empty-state-icon negative"><i data-lucide="plug-zap"></i></span><strong>比赛列表暂时不可用</strong><p>${escapeHtml(state.matchesError)}</p><button class="command-button secondary" type="button" data-retry-matches><i data-lucide="refresh-cw"></i><span>重新连接</span></button></div>`;
+    const guidance = matchListFailureGuidance({
+      errorCode: state.matchesErrorCode,
+      errorMessage: state.matchesError,
+      parserOnline: state.parserOnline,
+    });
+    list.innerHTML = `
+      <div class="match-empty-state match-diagnostic-state">
+        <span class="empty-state-icon negative"><i data-lucide="plug-zap"></i></span>
+        <strong>${escapeHtml(guidance.title)}</strong>
+        <p>${escapeHtml(guidance.detail)}</p>
+        <div class="match-error-summary"><i data-lucide="circle-alert"></i><span>${escapeHtml(state.matchesError)}</span></div>
+        ${renderMatchTroubleshootingChecks(guidance.checks)}
+        <div class="empty-state-actions">
+          <button class="command-button" type="button" data-retry-matches><i data-lucide="refresh-cw"></i><span>重新读取</span></button>
+          <button class="command-button secondary" type="button" data-import-private-replay><i data-lucide="file-plus-2"></i><span>导入本机 Replay</span></button>
+          <button class="command-button secondary" type="button" data-copy-match-error><i data-lucide="clipboard-check"></i><span>复制反馈</span></button>
+        </div>
+      </div>`;
     resultCount.textContent = "未读取到比赛";
     refreshIcons(list);
     return;
   }
   if (state.matchesStatus === "idle") {
-    list.innerHTML = `<div class="match-empty-state"><span class="empty-state-icon"><i data-lucide="user-round-search"></i></span><strong>输入 Steam 数字 ID</strong><p>本地解析器会读取该账号最近 20 场比赛，并标出可自动解析的场次。</p></div>`;
+    list.innerHTML = `<div class="match-empty-state"><span class="empty-state-icon"><i data-lucide="user-round-search"></i></span><strong>输入 Dota 2 游戏 ID</strong><p data-match-limit-copy>本地解析器会读取该账号最近最多 ${state.matchLimit} 场比赛，并标出可自动解析的场次。</p></div>`;
     resultCount.textContent = "等待账号";
+    refreshIcons(list);
+    return;
+  }
+  if (!state.matches.length) {
+    const guidance = matchHistoryGuidance(state.matchesAvailability);
+    list.innerHTML = `
+      <div class="match-empty-state match-private-state">
+        <span class="empty-state-icon warning"><i data-lucide="shield-alert"></i></span>
+        <strong>${escapeHtml(guidance.title)}</strong>
+        <p>${escapeHtml(guidance.detail)}</p>
+        ${renderMatchTroubleshootingChecks(guidance.checks)}
+        <div class="empty-state-actions">
+          <button class="command-button" type="button" data-import-private-replay><i data-lucide="file-plus-2"></i><span>导入本机 Replay</span></button>
+          <button class="command-button secondary" type="button" data-scan-private-replays><i data-lucide="scan-search"></i><span>扫描 Replay 目录</span></button>
+        </div>
+      </div>`;
+    resultCount.textContent = state.matchesAvailability?.likely_immortal_draft
+      ? "公开 API 不包含 8500+ Immortal Draft 对局"
+      : "公开比赛历史为空";
     refreshIcons(list);
     return;
   }
@@ -1784,11 +2498,16 @@ function renderMatches() {
     const statusDetail = match.recoverable ? "检测到本地缓存，可继续解析" : meta.detail;
     const progress = match.status === "processing" ? Math.max(2, match.progress || 2) : null;
     const kda = (match.kills + match.assists) / Math.max(1, match.deaths);
+    const result = match.win == null
+      ? { label: "本地", className: "neutral" }
+      : match.win
+        ? { label: "胜利", className: "positive" }
+        : { label: "失败", className: "negative" };
     return `
-      <button class="match-row match-row-${match.status}" type="button" role="listitem" data-match-id="${match.id}" aria-label="${escapeHtml(match.hero.name)} ${match.win ? "胜利" : "失败"}，${meta.label}">
+      <button class="match-row match-row-${match.status}" type="button" role="listitem" data-match-id="${match.id}" aria-label="${escapeHtml(match.hero.name)} ${result.label}，${meta.label}">
         <span class="match-identity">
           <img src="${heroImage(match.hero.token)}" alt="${escapeHtml(match.hero.name)}">
-          <span><strong><b class="match-result ${match.win ? "positive" : "negative"}">${match.win ? "胜利" : "失败"}</b>${escapeHtml(match.hero.name)}</strong><small>${escapeHtml(match.date)} · ${escapeHtml(match.mode)}</small></span>
+          <span><strong><b class="match-result ${result.className}">${result.label}</b>${escapeHtml(match.hero.name)}</strong><small>${escapeHtml(match.date)} · ${escapeHtml(match.mode)}</small></span>
         </span>
         <span class="row-stat">${match.kills} / ${match.deaths} / ${match.assists}<small>KDA ${kda < 10 ? kda.toFixed(2) : "10+"}</small></span>
         <span class="row-stat">${match.lh} / ${match.denies == null ? "--" : match.denies}<small>补刀 / 反补</small></span>
@@ -1799,7 +2518,7 @@ function renderMatches() {
       </button>
     `;
   }).join("");
-  resultCount.textContent = `显示 ${filtered.length} / ${state.matches.length} 场比赛`;
+  resultCount.textContent = `显示 ${filtered.length} / ${state.matches.length} 场比赛${state.matchesOffline ? " · 离线缓存" : ""}`;
   refreshIcons(list);
 }
 
@@ -1938,10 +2657,12 @@ function markerHtml(marker) {
   if (!Number.isFinite(Number(marker.x)) || !Number.isFinite(Number(marker.y))) return "";
   const icon = marker.type === "camp" ? "trees" : marker.type === "ward" ? "eye" : marker.type === "objective" ? "landmark" : "swords";
   const title = marker.static ? marker.title : `${formatTime(marker.time)} · ${marker.title}`;
+  const entityId = marker.type === "objective" ? objectiveEventId(marker) : "";
+  const selected = entityId && entityId === state.selectedMapEventId;
   const actionAttribute = marker.static
     ? `data-map-marker-id="${escapeHtml(marker.id || marker.type)}" aria-disabled="true"`
-    : `data-map-time="${Number(marker.time)}"`;
-  return `<button class="map-pin ${marker.type}" type="button" ${actionAttribute} style="left:${marker.x}%;top:${marker.y}%" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}"><i data-lucide="${icon}"></i></button>`;
+    : `data-map-time="${Number(marker.time)}"${entityId ? ` data-map-event-id="${escapeHtml(entityId)}"` : ""}`;
+  return `<button class="map-pin ${marker.type} ${selected ? "selected" : ""}" type="button" ${actionAttribute} style="left:${marker.x}%;top:${marker.y}%" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}"><i data-lucide="${icon}"></i></button>`;
 }
 
 function combatMapMarkers() {
@@ -2589,6 +3310,13 @@ function nextPeriodicTime(current, first, interval, last = Infinity) {
 function renderFarmResourceClock() {
   const current = state.currentTime;
   const m = FARM_MECHANICS;
+  const patchLabel = document.querySelector("#farm-resource-patch");
+  if (patchLabel) {
+    patchLabel.textContent = resourceClockPatchLabel(
+      state.currentAnalysis?.match?.patch_name,
+      m.patch_baseline,
+    );
+  }
   const runeTime = current < Number(m.power_rune_first || 360)
     ? nextPeriodicTime(current, Number(m.water_rune_first || 120), 120, Number(m.water_rune_last || 240))
     : nextPeriodicTime(current, Number(m.power_rune_first || 360), Number(m.power_rune_interval || 120));
@@ -2604,7 +3332,7 @@ function renderFarmResourceClock() {
   const root = document.querySelector("#farm-resource-clock");
   root.innerHTML = resources.map(([icon, label, time]) => {
     const remaining = time == null ? null : Math.max(0, time - current);
-    return `<span class="farm-resource-tick ${remaining != null && remaining <= 10 ? "due" : ""}"><i data-lucide="${icon}"></i><span><small>${label}</small><strong>${time == null ? "本轮已结束" : `${formatTime(time)} · ${remaining}s`}</strong></span></span>`;
+    return `<span class="farm-resource-tick ${remaining != null && remaining <= 10 ? "due" : ""}"><i data-lucide="${icon}"></i><span><small>${label}</small><strong>${time == null ? "本轮已结束" : `${formatTime(time)} · ${formatCountdownSeconds(remaining)}`}</strong></span></span>`;
   }).join("");
   const resourcePosition = Number(FARM_LANE_OPPORTUNITY.position || 0);
   const phase = current < 450 ? "0-7:30 对线期"
@@ -2748,9 +3476,11 @@ function renderFarmSummary() {
   const stackGold = Number(FARM_STACK_VALUE_SUMMARY.created_gold_estimate || 0);
   const resourcePosition = Number(FARM_LANE_OPPORTUNITY.position || 0);
   const post20Core = state.farmTimeWindow === "post20" && resourcePosition > 0 && resourcePosition <= 3;
+  const playerWaveCount = countPlayerLaneWaves(FARM_LANE_WAVES, state.selectedHeroSlot);
+  const waveScopeTitle = `本人关联指该波存在本人的补刀、反补或已归因兵线收入；全场共观测 ${FARM_LANE_WAVES.length} 个阵营分路波次。`;
   const metrics = [
     ["coins", "资源收入", `${total.toLocaleString("zh-CN")}g`, "Replay 金钱事件归因"],
-    ["wheat", "兵线", `${lane.toLocaleString("zh-CN")}g`, `${percentage(lane)} · ${Number(kills.lane || 0)} 小兵 · ${FARM_LANE_WAVES.length} 波`],
+    ["wheat", "兵线收入", `${lane.toLocaleString("zh-CN")}g`, `${percentage(lane)} · ${Number(kills.lane || 0)} 小兵 · 本人关联 ${playerWaveCount} 波`, waveScopeTitle],
     ["trees", "野区", `${neutral.toLocaleString("zh-CN")}g`, `${percentage(neutral)} · ${FARM_CAMP_STATES.length} 野点 · ${FARM_CAMP_STATES.reduce((sum, camp) => sum + (camp.observations || []).length, 0)} 周期`],
     ["scan-search", "漏线复核", `${reviewableMisses} 个`, `${missedGold > 0 ? `约 ${missedGold}g` : "仅展示事实"} · 已补 ${Number(laneSummary.secured || 0)} 个`],
     ["layers-3", "叠野创造", `${stackGold > 0 ? `约 ${stackGold}g` : `${Number(FARM_STACK_VALUE_SUMMARY.stacked_camps || 0)} 营`}`, `${Number(FARM_STACK_VALUE_SUMMARY.stacked_creeps || 0)} 个额外单位 · 团队价值`],
@@ -2759,8 +3489,8 @@ function renderFarmSummary() {
       : `${recoverable > 0 ? `复盘机会差 +${recoverable}g` : "严格证据门禁"}`],
   ];
   const root = document.querySelector("#farm-summary");
-  root.innerHTML = metrics.map(([icon, label, value, detail]) => `
-    <span class="farm-summary-item"><i data-lucide="${icon}"></i><span><small>${label}</small><strong>${value}</strong><em>${detail}</em></span></span>
+  root.innerHTML = metrics.map(([icon, label, value, detail, title = ""]) => `
+    <span class="farm-summary-item" ${title ? `title="${escapeHtml(title)}"` : ""}><i data-lucide="${icon}"></i><span><small>${label}</small><strong>${value}</strong><em>${detail}</em></span></span>
   `).join("");
   refreshIcons(root);
 }
@@ -3050,15 +3780,24 @@ function updateMap() {
 }
 
 function renderMapEventList() {
-  const events = [...WARD_EVENTS, ...combatMapMarkers(), ...OBJECTIVE_EVENTS]
+  const allEvents = [...WARD_EVENTS, ...combatMapMarkers(), ...OBJECTIVE_EVENTS];
+  const events = allEvents
     .sort((a, b) => Math.abs(a.time - state.currentTime) - Math.abs(b.time - state.currentTime))
     .slice(0, 6)
     .sort((a, b) => a.time - b.time);
+  const selected = OBJECTIVE_EVENTS.find(
+    (event) => objectiveEventId(event) === state.selectedMapEventId,
+  );
+  if (selected && !events.includes(selected)) {
+    events.splice(Math.max(0, events.length - 1), 1, selected);
+    events.sort((a, b) => a.time - b.time);
+  }
   const list = document.querySelector("#map-event-list");
   list.innerHTML = events.map((event) => {
     const icon = event.type === "ward" ? "eye" : event.type === "objective" ? "landmark" : "swords";
     const location = state.currentAnalysis ? regionName(event.location || event.region || "unknown") : regionForPosition(event);
-    return `<button class="map-event-row" type="button" data-map-time="${event.time}"><time>${formatTime(event.time)}</time><i data-lucide="${icon}"></i><span><strong>${event.title}</strong><small>${location}</small></span><i data-lucide="chevron-right"></i></button>`;
+    const entityId = event.type === "objective" ? objectiveEventId(event) : "";
+    return `<button class="map-event-row ${entityId && entityId === state.selectedMapEventId ? "active" : ""}" type="button" data-map-time="${event.time}"${entityId ? ` data-map-event-id="${escapeHtml(entityId)}"` : ""}><time>${formatTime(event.time)}</time><i data-lucide="${icon}"></i><span><strong>${event.title}</strong><small>${location}</small></span><i data-lucide="chevron-right"></i></button>`;
   }).join("");
   refreshIcons(list);
 }
@@ -3137,19 +3876,23 @@ function chartOption() {
   };
 }
 
-function ensureChart() {
+async function ensureChart() {
   const container = document.querySelector("#development-chart");
   if (!container || container.clientWidth < 2 || container.clientHeight < 2) return;
   if (!state.chart) {
-    state.chart = echarts.init(container, null, { renderer: "canvas" });
-    state.chart.on("click", (params) => {
-      if (Array.isArray(params.value)) updateCurrentTime(params.value[0]);
-    });
-    state.chart.on("datazoom", () => {
-      const option = state.chart.getOption();
-      const zoom = option.dataZoom?.[0];
-      if (zoom) state.chartZoom = [zoom.start, zoom.end];
-    });
+    const chartRuntime = await loadChartRuntime();
+    if (!container.isConnected || container.clientWidth < 2 || container.clientHeight < 2) return;
+    if (!state.chart) {
+      state.chart = chartRuntime.init(container, null, { renderer: "canvas" });
+      state.chart.on("click", (params) => {
+        if (Array.isArray(params.value)) updateCurrentTime(params.value[0]);
+      });
+      state.chart.on("datazoom", () => {
+        const option = state.chart.getOption();
+        const zoom = option.dataZoom?.[0];
+        if (zoom) state.chartZoom = [zoom.start, zoom.end];
+      });
+    }
   }
   state.chart.setOption(chartOption(), true);
   window.requestAnimationFrame(() => state.chart?.resize());
@@ -3236,7 +3979,8 @@ function renderBuild() {
       const isItem = "action" in event;
       const image = isItem ? itemImage(event.key) : abilityImage(event.key);
       const name = isItem ? itemName(event.key) : `${event.name || abilityName(event.key)} ${event.level}级`;
-      return `<button class="track-event" type="button" data-build-time-ms="${event.timeMs ?? event.time * 1000}" style="left:${position}px;top:${8 + lane * 38}px" title="${formatPreciseTimeMs(event.timeMs ?? event.time * 1000)} · ${name}"><img src="${image}" alt="${name}"><small>${formatTime(event.time)}</small></button>`;
+      const entityId = isItem ? purchaseEventId(event, state.selectedHeroSlot) : "";
+      return `<button class="track-event ${entityId && entityId === state.selectedBuildEventId ? "active" : ""}" type="button" data-build-time-ms="${event.timeMs ?? event.time * 1000}"${entityId ? ` data-build-event-id="${escapeHtml(entityId)}"` : ""} style="left:${position}px;top:${8 + lane * 38}px" title="${formatPreciseTimeMs(event.timeMs ?? event.time * 1000)} · ${name}"><img src="${image}" alt="${name}"><small>${formatTime(event.time)}</small></button>`;
     }).join("")}</div></div>
   `).join("");
   buildTracks.scrollLeft = previousScrollLeft;
@@ -3270,7 +4014,15 @@ function combatEventRows(fight) {
   if (state.currentAnalysis) {
     return (fight.events || []).map((event) => {
       const view = timelineEventView({ ...event, id: `${fight.id}-${event.time}-${event.kind}` });
-      return { time: view.time, timeMs: view.timeMs, icon: view.icon, text: `${view.actor} · ${view.text}`, value: view.value };
+      const eventSeq = Number(event.event_seq ?? event.eventSeq);
+      return {
+        time: view.time,
+        timeMs: view.timeMs,
+        eventSeq: Number.isFinite(eventSeq) ? eventSeq : null,
+        icon: view.icon,
+        text: `${view.actor} · ${view.text}`,
+        value: view.value,
+      };
     });
   }
   const base = fight.start;
@@ -3567,7 +4319,7 @@ function renderCombatVision(fight, contributions) {
     const visibility = Number(vision.combat_log_visibility_pct || 0);
     const observer = Number(vision.nearby_observers || 0);
     const sentry = Number(vision.nearby_sentries || 0);
-    const status = `${vision.observer_coverage ? "有视野" : "无眼覆盖"}${vision.sentry_coverage ? " · 有反隐" : ""}`;
+    const status = combatVisionStatus(vision);
     return `<article class="combat-vision-team ${team}">
       <header class="combat-vision-team-head">
         <strong>${label}</strong>
@@ -3641,24 +4393,233 @@ function renderCombatContext(fight) {
     : `<div class="coverage-empty"><span>本片段没有可关联的越塔、TP 或肉山事实链</span></div>`;
 }
 
-function renderCombatContributions(fight, contributions) {
-  const table = document.querySelector("#combat-contribution-table");
-  if (!contributions.length) {
-    table.innerHTML = `<div class="coverage-empty"><span>该战斗缺少可归属到英雄的贡献事件</span></div>`;
+function selectedCombatFight() {
+  return COMBAT_SEGMENTS.find((fight) => fight.id === state.selectedCombatId) || null;
+}
+
+function combatContributionTimingFacts() {
+  return HEROES.flatMap((hero) => {
+    const facts = hero.report?.combat_timing?.fight_facts;
+    if (!Array.isArray(facts)) return [];
+    return facts.map((fact) => ({
+      ...fact,
+      player_slot: fact.player_slot == null ? hero.slot : Number(fact.player_slot),
+    }));
+  });
+}
+
+function combatContributionScopeFights() {
+  return filterCombatContributionFights(COMBAT_SEGMENTS, state.combatFilter);
+}
+
+function combatContributionRows(fight, contributions) {
+  if (state.combatContributionScope === "all") {
+    return aggregateCombatContributions({
+      heroes: HEROES,
+      fights: combatContributionScopeFights(),
+      timingFacts: combatContributionTimingFacts(),
+    });
+  }
+  return buildCombatContributionRoster({
+    heroes: HEROES,
+    fight: {
+      ...(fight || {}),
+      contributions: Array.isArray(contributions) ? contributions : [],
+    },
+  });
+}
+
+async function renderCombatContributionChart(model) {
+  const container = document.querySelector("#combat-contribution-chart");
+  state.combatContributionChartModel = model;
+  if (!container) return;
+  const renderToken = ++state.combatContributionRenderToken;
+  const chartRuntime = await loadChartRuntime();
+  if (renderToken !== state.combatContributionRenderToken) return;
+  if (container.clientWidth < 2 || container.clientHeight < 2) return;
+  if (!state.combatContributionChart) {
+    state.combatContributionChart = chartRuntime.init(container, null, { renderer: "canvas" });
+    state.combatContributionChart.on("click", (params) => {
+      const slot = Number(params.data?.slot);
+      if (!Number.isInteger(slot) || slot < 0 || slot > 9) return;
+      state.selectedCombatPlayerSlot = slot;
+      state.selectedCombatContributionDimension = state.combatContributionMetric;
+      state.combatInspectorView = "audit";
+      const fight = selectedCombatFight();
+      if (!fight) return;
+      const contributions = fightContributions(fight);
+      const rows = renderCombatContributionWorkspace(fight, contributions);
+      renderCombatMap(fight, contributions);
+      renderCombatPlayerAudit(fight, rows);
+      setCombatInspectorView("audit");
+      if (window.innerWidth < 1280) setCombatCompactView("audit");
+    });
+  }
+  const labelWidth = container.clientWidth < 620 ? 132
+    : container.clientWidth < 780 ? 154 : 190;
+  container.parentElement?.style.setProperty("--combat-contribution-label-width", `${labelWidth}px`);
+  state.combatContributionChart.setOption(combatContributionChartOption({
+    ...model,
+    labelWidth,
+  }), true);
+  window.requestAnimationFrame(() => state.combatContributionChart?.resize());
+}
+
+function renderCombatContributionWorkspace(fight, contributions) {
+  const rows = combatContributionRows(fight, contributions);
+  const model = combatContributionChartModel({
+    rows,
+    metric: state.combatContributionMetric,
+  });
+  const scopeFights = state.combatContributionScope === "all"
+    ? combatContributionScopeFights() : fight ? [fight] : [];
+  const sample = document.querySelector("#combat-contribution-sample");
+  if (sample) {
+    sample.textContent = combatContributionSampleLabel({
+      scope: state.combatContributionScope,
+      fight,
+      filter: state.combatFilter,
+      sampleCount: scopeFights.length,
+      totalCount: COMBAT_SEGMENTS.length,
+    });
+  }
+  document.querySelectorAll("[data-combat-contribution-scope]").forEach((button) => {
+    const active = button.dataset.combatContributionScope === state.combatContributionScope;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  document.querySelectorAll("[data-combat-contribution-metric]").forEach((button) => {
+    const active = button.dataset.combatContributionMetric === state.combatContributionMetric;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+  });
+  const labels = document.querySelector("#combat-contribution-labels");
+  if (labels) {
+    labels.innerHTML = combatContributionLabelMarkup({
+      model,
+      selectedSlot: state.selectedCombatPlayerSlot,
+      heroImage: (hero) => heroImage(hero.token),
+    });
+    installImageFallback(labels, heroImage("unknown"));
+  }
+  const accessible = document.querySelector("#combat-contribution-accessible");
+  if (accessible) accessible.innerHTML = combatContributionAccessibleMarkup(model);
+  void renderCombatContributionChart(model);
+  return rows;
+}
+
+function combatEvidenceDescription(event) {
+  const kind = String(event.kind || "");
+  const key = String(event.key || "");
+  const name = kind === "item_use" || kind === "item_uses"
+    ? itemName(key)
+    : key ? abilityName(key) : "";
+  const value = Number(event.value);
+  if (kind === "damage") return `${name || "伤害事件"} · ${value.toLocaleString("zh-CN")} 伤害`;
+  if (kind === "damage_taken") return `${name || "承伤事件"} · ${value.toLocaleString("zh-CN")} 承伤`;
+  if (kind === "control") return `${name || "控制事件"} · ${value.toFixed(1)} 秒`;
+  if (kind === "heal" || kind === "healing") return `${name || "治疗事件"} · ${value.toLocaleString("zh-CN")} 治疗`;
+  if (kind === "ability_cast" || kind === "ability_casts") return `施放 ${name || "技能"}`;
+  if (kind === "item_use" || kind === "item_uses") return `使用 ${name || "物品"}`;
+  if (kind === "ward_place" || kind === "vision_setup") return `${name || "眼位"} · 视野准备`;
+  if (kind.includes("arrival")) return `进入主战场 · +${value.toFixed(1)} 秒`;
+  return [name, kind, Number.isFinite(value) ? value.toLocaleString("zh-CN") : ""].filter(Boolean).join(" · ")
+    || "关联事件";
+}
+
+function clearCombatResponsibilityDetails(message) {
+  state.combatResponsibilityRadarModel = null;
+  state.combatResponsibilityRadar?.clear();
+  const radar = document.querySelector("#combat-responsibility-radar");
+  if (radar) {
+    radar.classList.add("empty");
+    radar.dataset.emptyMessage = message;
+  }
+  const components = document.querySelector("#combat-score-components");
+  if (components) components.innerHTML = `<div class="coverage-empty"><span>${message}</span></div>`;
+  const detail = document.querySelector("#combat-dimension-detail");
+  if (detail) detail.innerHTML = "";
+}
+
+async function renderCombatResponsibilityRadar(model) {
+  const container = document.querySelector("#combat-responsibility-radar");
+  state.combatResponsibilityRadarModel = model;
+  if (!container) return;
+  const renderToken = ++state.combatResponsibilityRadarRenderToken;
+  const option = combatResponsibilityRadarOption(model);
+  if (!option) {
+    state.combatResponsibilityRadar?.clear();
+    container.classList.add("empty");
+    container.dataset.emptyMessage = model.scoreBreakdownAvailable
+      ? "当前门禁下不足 3 个职责维度可评价"
+      : "重新解析后生成位置职责雷达";
     return;
   }
-  table.innerHTML = contributions.map((row) => {
-    const hero = safeHero(row.slot);
-    const gate = responsibilityGateMeta(row.responsibility_gate);
-    const score = row.status === "insufficient_evidence" || row.responsibility_gate && row.responsibility_gate.status !== "passed"
-      ? "证据不足" : Number(row.responsibilityScore || 0);
-    return `<button class="combat-contribution-row ${state.selectedCombatPlayerSlot === row.slot ? "active" : ""}" type="button" data-combat-player-slot="${row.slot}">
-      <span class="combat-contribution-player"><img src="${heroImage(hero.token)}" alt="${hero.name}"><span><strong>${hero.player}${hero.me ? " · 我" : ""}</strong><small>${hero.name} · 伤害占比 ${Number(row.teamDamageShare || 0).toFixed(1)}%</small></span></span>
-      <span><i class="combat-role-tag">${positionLabel(hero.position)}</i></span>
-      <span>${Number(row.damage || 0).toLocaleString("zh-CN")}</span><span>${Number(row.abilityCasts || 0)}</span><span>${Number(row.controlSeconds || 0).toFixed(1)}s</span><span>${Number(row.healing || 0)}</span><span>${Number(row.presencePct || 0)}%</span><span><i class="combat-score-tag ${row.responsibility_gate ? gate.className : row.status || "watch"}">${score}</i></span>
-    </button>`;
-  }).join("");
-  installImageFallback(table, heroImage("unknown"));
+  container.classList.remove("empty");
+  container.removeAttribute("data-empty-message");
+  const chartRuntime = await loadChartRuntime();
+  if (renderToken !== state.combatResponsibilityRadarRenderToken) return;
+  if (container.clientWidth < 2 || container.clientHeight < 2) return;
+  if (!state.combatResponsibilityRadar) {
+    state.combatResponsibilityRadar = chartRuntime.init(container, null, { renderer: "canvas" });
+    state.combatResponsibilityRadar.on("click", (params) => {
+      const axis = state.combatResponsibilityRadarModel?.roleAxes
+        ?.find((item) => item.label === params.name && item.applicable);
+      if (!axis) return;
+      state.selectedCombatContributionDimension = axis.key;
+      const fight = selectedCombatFight();
+      if (!fight) return;
+      renderCombatPlayerAudit(fight, combatContributionRows(fight, fightContributions(fight)));
+    });
+  }
+  state.combatResponsibilityRadar.setOption(option, true);
+  window.requestAnimationFrame(() => state.combatResponsibilityRadar?.resize());
+}
+
+function combatContributionOpponent(rows, contribution) {
+  return rows.find((row) => (
+    row.team !== contribution.team
+    && Number(row.position) === Number(contribution.position)
+  )) || null;
+}
+
+function renderCombatResponsibilityDetails(contribution, rows) {
+  const opponent = combatContributionOpponent(rows, contribution);
+  let dimension = state.selectedCombatContributionDimension || state.combatContributionMetric;
+  let model = combatContributionDrilldown({
+    row: contribution,
+    opponent,
+    metric: dimension,
+    scope: state.combatContributionScope,
+  });
+  if (dimension === "responsibility" && model.scoreBreakdownAvailable) {
+    const preferred = model.roleAxes.find((axis) => axis.available)
+      || model.roleAxes.find((axis) => axis.applicable);
+    if (preferred) {
+      dimension = preferred.key;
+      state.selectedCombatContributionDimension = dimension;
+      model = combatContributionDrilldown({
+        row: contribution,
+        opponent,
+        metric: dimension,
+        scope: state.combatContributionScope,
+      });
+    }
+  }
+  const components = document.querySelector("#combat-score-components");
+  if (components) {
+    components.innerHTML = combatScoreComponentsMarkup(
+      model,
+      state.selectedCombatContributionDimension,
+    );
+  }
+  const detail = document.querySelector("#combat-dimension-detail");
+  if (detail) {
+    detail.innerHTML = combatDimensionDetailMarkup(model, {
+      evidenceLabel: combatEvidenceDescription,
+    });
+  }
+  void renderCombatResponsibilityRadar(model);
 }
 
 function renderCombatPlayerAudit(fight, contributions) {
@@ -3668,10 +4629,24 @@ function renderCombatPlayerAudit(fight, contributions) {
     document.querySelector("#combat-audit-score").textContent = "--";
     document.querySelector("#combat-player-audit").innerHTML = `<div class="coverage-empty"><span>贡献评分已停用，直到解析器取得真实施法、伤害或控制证据</span></div>`;
     document.querySelector("#damage-breakdown").innerHTML = "";
+    clearCombatResponsibilityDetails("没有可审计的玩家事件");
     return;
   }
   state.selectedCombatPlayerSlot = contribution.slot;
   const hero = safeHero(contribution.slot);
+  if (contribution.hasContribution === false) {
+    const status = contribution.displayStatus === "not_participant"
+      ? "未进入主战场"
+      : "参战事件不足";
+    document.querySelector("#combat-player-heading").textContent = `${hero.name} · ${positionLabel(hero.position)}`;
+    document.querySelector("#combat-audit-kicker").textContent = `责任审计 · ${status}`;
+    document.querySelector("#combat-audit-score").textContent = "--";
+    document.querySelector("#combat-player-audit").innerHTML = `<div class="coverage-empty"><span>${status}，保留该玩家位置但不生成职责评分或负面结论</span></div>`;
+    document.querySelector("#damage-breakdown").innerHTML = `<div class="coverage-empty"><span>当前统计范围没有可下钻的贡献事件</span></div>`;
+    clearCombatResponsibilityDetails(status);
+    return;
+  }
+  renderCombatResponsibilityDetails(contribution, contributions);
   const gate = contribution.responsibility_gate || null;
   const gateMeta = responsibilityGateMeta(gate);
   document.querySelector("#combat-player-heading").textContent = `${hero.name} · ${positionLabel(hero.position)}`;
@@ -3770,13 +4745,17 @@ function renderCombat(options = {}) {
 }
 
 function renderSelectedCombat() {
-  const fight = COMBAT_SEGMENTS.find((item) => item.id === state.selectedCombatId)
+  const fight = selectedCombatFight()
     || (state.combatFilter === "all" ? COMBAT_SEGMENTS[0] : null);
   if (!fight) {
     document.querySelector("#combat-heading").textContent = "没有战斗片段";
     document.querySelector("#combat-event-stream").innerHTML = "";
     document.querySelector("#damage-breakdown").innerHTML = "";
-    document.querySelector("#combat-contribution-table").innerHTML = "";
+    document.querySelector("#combat-contribution-labels").innerHTML = "";
+    document.querySelector("#combat-contribution-accessible").innerHTML = "";
+    state.combatContributionChartModel = null;
+    state.combatContributionChart?.clear();
+    clearCombatResponsibilityDetails("没有可审计的战斗片段");
     document.querySelector("#combat-overview-stats").innerHTML = "";
     document.querySelector("#combat-context-summary").innerHTML = "";
     document.querySelector("#combat-vision-summary").innerHTML = "";
@@ -3798,46 +4777,18 @@ function renderSelectedCombat() {
     result.className = `result-pill ${tone}`;
   }
   const contributions = fightContributions(fight);
-  if (!contributions.some((row) => row.slot === state.selectedCombatPlayerSlot)) {
-    state.selectedCombatPlayerSlot = contributions.some((row) => row.slot === state.selectedHeroSlot) ? state.selectedHeroSlot : contributions[0]?.slot;
+  if (!HEROES.some((hero) => hero.slot === state.selectedCombatPlayerSlot)) {
+    state.selectedCombatPlayerSlot = state.selectedHeroSlot;
   }
   renderCombatMap(fight, contributions);
   renderCombatVision(fight, contributions);
   renderCombatContext(fight);
-  renderCombatContributions(fight, contributions);
-  renderCombatPlayerAudit(fight, contributions);
+  const contributionRows = renderCombatContributionWorkspace(fight, contributions);
+  renderCombatPlayerAudit(fight, contributionRows);
   const eventStream = document.querySelector("#combat-event-stream");
-  eventStream.innerHTML = combatEventRows(fight).map((event) => `<button class="combat-event-row" type="button" data-combat-time-ms="${event.timeMs ?? event.time * 1000}"><time>${formatPreciseTimeMs(event.timeMs ?? event.time * 1000)}</time><span class="event-symbol"><i data-lucide="${event.icon}"></i></span><strong>${event.text}</strong><small>${event.value}</small></button>`).join("");
+  eventStream.innerHTML = combatEventRows(fight).map((event) => `<button class="combat-event-row" type="button" data-combat-time-ms="${event.timeMs ?? event.time * 1000}" data-event-seq="${event.eventSeq ?? ""}"><time>${formatPreciseTimeMs(event.timeMs ?? event.time * 1000)}</time><span class="event-symbol"><i data-lucide="${event.icon}"></i></span><strong>${event.text}</strong><small>${event.value}</small></button>`).join("");
   setCombatInspectorView(state.combatInspectorView);
   refreshIcons(document.querySelector("#detail-combat"));
-}
-
-function eventRowHtml(event, top) {
-  return `<button class="event-row" type="button" data-event-time-ms="${event.timeMs ?? event.time * 1000}" style="top:${top}px"><time>${formatPreciseTimeMs(event.timeMs ?? event.time * 1000)}</time><span class="event-type-icon"><i data-lucide="${event.icon}"></i>${event.type}</span><span>${event.actor}</span><span>${event.text}</span><span class="event-value">${event.value}</span><span>${event.location}</span><span class="evidence-tag ${event.evidence === "事实" ? "fact" : "derived"}">${event.evidence}</span></button>`;
-}
-
-function filterTimelineEvents() {
-  const search = document.querySelector("#event-search").value.trim().toLowerCase();
-  state.filteredEvents = TIMELINE_EVENTS.filter((event) => {
-    const categoryMatches = state.eventFilter === "all" || event.category === state.eventFilter;
-    const haystack = `${event.actor} ${event.type} ${event.text} ${event.location}`.toLowerCase();
-    return categoryMatches && (!search || haystack.includes(search));
-  });
-  const table = document.querySelector("#event-table");
-  table.scrollTop = 0;
-  renderVirtualEvents();
-  document.querySelector("#event-count").textContent = `${state.filteredEvents.length.toLocaleString("zh-CN")} 条事件`;
-}
-
-function renderVirtualEvents() {
-  const table = document.querySelector("#event-table");
-  const rowHeight = 36;
-  const start = Math.max(0, Math.floor(table.scrollTop / rowHeight) - 5);
-  const visibleCount = Math.ceil((table.clientHeight || 420) / rowHeight) + 10;
-  const end = Math.min(state.filteredEvents.length, start + visibleCount);
-  const rows = state.filteredEvents.slice(start, end).map((event, index) => eventRowHtml(event, (start + index) * rowHeight)).join("");
-  table.innerHTML = `<div class="event-virtual-space" style="height:${state.filteredEvents.length * rowHeight}px">${rows}</div>`;
-  refreshIcons(table);
 }
 
 function renderScoreboard() {
@@ -4078,27 +5029,42 @@ function playerScoreMetricReference(model, reference) {
 
 function playerScoreModel(hero = safeHero(state.selectedHeroSlot), { buildBrief = true } = {}) {
   const report = hero.report || null;
+  const upgradeState = playerReportUpgradeState(report);
   const scoreCard = report?.score_card || report || {};
+  const scoreAudit = recomputePlayerReportScoreAudit(report || {});
+  const scoreAuditByKey = new Map(scoreAudit.rows.map((row) => [row.key, row]));
   const position = clamp(Number(report?.position || hero.position) || 0, 0, 5);
   const weights = PLAYER_SCORE_ROLE_WEIGHTS[position] || PLAYER_SCORE_ROLE_WEIGHTS[3];
   const rawDimensions = Array.isArray(scoreCard.dimensions)
     ? scoreCard.dimensions : Array.isArray(report?.dimensions) ? report.dimensions : [];
   const rawByKey = new Map(rawDimensions.map((dimension) => [String(dimension.key || ""), dimension]));
   const confidence = playerScoreNumber(scoreCard.confidence ?? report?.confidence);
-  const overallScore = playerScoreNumber(scoreCard.overall_score ?? report?.overall_score);
+  const overallScore = playerScoreNumber(
+    scoreCard.final_score ?? scoreCard.overall_score ?? report?.final_score ?? report?.overall_score,
+  );
+  const baseOverallScore = playerScoreNumber(scoreCard.base_score ?? report?.base_score);
+  const behaviorModifier = playerScoreNumber(
+    scoreCard.behavior_modifier ?? report?.behavior_modifier,
+  );
   const roleConfidence = playerScoreNumber(report?.role_confidence ?? hero.roleConfidence ?? hero.facts?.role_confidence);
   const canShowOverall = overallScore != null && confidence != null && confidence >= 65 && roleConfidence != null && roleConfidence >= 65;
   const evidenceLevel = scoreCard.evidence_level || report?.evidence_level || (report ? "partial" : "missing");
   const dimensions = Object.entries(PLAYER_SCORE_DIMENSION_META).map(([key, meta]) => {
     const sourceKey = PLAYER_SCORE_DIMENSION_ALIASES[key].find((candidate) => rawByKey.has(candidate));
     const source = sourceKey ? rawByKey.get(sourceKey) : null;
-    const score = playerScoreNumber(source?.score);
+    const baseScore = playerScoreNumber(source?.base_score ?? source?.score);
+    const behaviorModifier = playerScoreNumber(source?.behavior_modifier) ?? 0;
+    const finalScore = playerScoreNumber(source?.final_score ?? source?.score);
+    const score = finalScore;
     return {
       key,
       ...meta,
       sourceKey,
       source,
       score,
+      baseScore,
+      behaviorModifier,
+      finalScore,
       weight: Number(source?.weight ?? weights[key]) || 0,
       roleWeight: Number(weights[key]) || 0,
       effectiveWeight: playerScoreNumber(source?.effective_weight),
@@ -4112,6 +5078,11 @@ function playerScoreModel(hero = safeHero(state.selectedHeroSlot), { buildBrief 
       positiveRefs: source?.positive_refs || [],
       negativeRefs: source?.negative_refs || [],
       behaviorComponents: Array.isArray(source?.behavior_components) ? source.behavior_components : [],
+      scoringComponents: Array.isArray(source?.scoring_components) ? source.scoring_components : [],
+      baseComponents: Array.isArray(source?.base_components) ? source.base_components : [],
+      comparison: source?.comparison || null,
+      recomputation: source?.recomputation || null,
+      scoreAudit: scoreAuditByKey.get(key) || null,
       scoreImpact: playerScoreNumber(source?.score_impact),
     };
   });
@@ -4174,11 +5145,36 @@ function playerScoreModel(hero = safeHero(state.selectedHeroSlot), { buildBrief 
       : "当前分析包尚未形成完整的十维玩家评分。"),
     nextMatchFocus: report?.brief?.next_match_focus || report?.summary?.next_match_focus || "",
   };
+  const combatTimingSource = report?.combat_timing && typeof report.combat_timing === "object"
+    ? report.combat_timing
+    : {};
+  const combatTiming = {
+    model: String(combatTimingSource.model || ""),
+    coverage: combatTimingSource.coverage && typeof combatTimingSource.coverage === "object"
+      ? combatTimingSource.coverage
+      : {},
+    facts: (Array.isArray(combatTimingSource.fight_facts)
+      ? combatTimingSource.fight_facts
+      : []
+    ).filter((fact) => (
+      fact?.player_slot == null
+      || Number(fact.player_slot) === Number(hero.slot)
+    )).map((fact) => ({
+      ...fact,
+      jumpTarget: normalizePlayerReportJumpTarget(fact.jump_target),
+    })),
+    patterns: Array.isArray(combatTimingSource.patterns)
+      ? combatTimingSource.patterns
+      : [],
+  };
   const model = {
     hero,
     report,
-    hasReport: Boolean(report),
-    legacy: Boolean(report && report.model !== "player-report/3.0"),
+    hasReport: upgradeState.hasReport,
+    legacy: upgradeState.legacy,
+    missingCombatTiming: upgradeState.missingCombatTiming,
+    missingScoringAudit: upgradeState.missingScoringAudit,
+    needsUpgrade: upgradeState.needsUpgrade,
     model: report?.model || "player-report/1.1",
     position,
     role: PLAYER_ROLE_META[position] || { label: positionLabel(position), brief: "职责证据待补全" },
@@ -4188,6 +5184,9 @@ function playerScoreModel(hero = safeHero(state.selectedHeroSlot), { buildBrief 
     canShowOverall,
     evidenceLevel,
     overallScore,
+    baseOverallScore,
+    behaviorModifier,
+    scoreAudit,
     grade: canShowOverall ? scoreCard.grade || report?.grade || "-" : null,
     dimensions,
     strengths,
@@ -4195,16 +5194,30 @@ function playerScoreModel(hero = safeHero(state.selectedHeroSlot), { buildBrief 
     phases,
     summary,
     rawInsights,
+    combatTiming,
     rootCauses,
     rootCauseById,
     rootCauseSummary: scoreCard.root_cause_summary || null,
     storyNodes: Array.isArray(report?.story_nodes) ? report.story_nodes : [],
+    importantEvents: Array.isArray(report?.important_events) ? report.important_events : [],
+    eventCandidates: Array.isArray(report?.event_candidates) ? report.event_candidates : [],
     trainingPlan: Array.isArray(report?.training_plan) ? report.training_plan : [],
     evidenceIndex: report?.evidence_index && typeof report.evidence_index === "object" ? report.evidence_index : {},
     caveats: report?.caveats || [],
   };
   if (buildBrief) {
     model.brief = playerScoreBriefModel(model);
+    const simpleInsights = [
+      ...playerScoreBriefV3Insights(model, "strength", { limit: null }),
+      ...playerScoreBriefV3Insights(model, "improvement", { limit: null }),
+    ];
+    model.simpleReport = buildSimplePlayerReport({
+      dimensions: model.dimensions,
+      insights: simpleInsights,
+      importantEvents: model.importantEvents,
+      stories: model.storyNodes,
+      training: model.trainingPlan,
+    });
     if (!model.summary.nextMatchFocus) model.summary.nextMatchFocus = model.brief.focus;
     if (!report?.brief?.verdict && model.brief.verdict) model.summary.headline = model.brief.verdict;
   }
@@ -4277,14 +5290,16 @@ function playerScoreBriefV3Stories(model) {
     const module = phase === "laning" ? "development"
       : phase.includes("farm") || phase.includes("resource") ? "farm"
         : phase.includes("vision") ? "vision" : phase.includes("fight") ? "combat" : "timeline";
-    const verdict = ["advantage", "even", "disadvantage", "stable", "issue", "missing"].includes(node.verdict)
-      ? node.verdict : playerScoreBriefStatus(node.score);
+    const laneVerdict = phase === "laning" ? laneReviewForSlot(model.hero.slot)?.verdict : null;
+    const verdict = normalizePlayerStoryVerdict(laneVerdict || node.verdict, playerScoreBriefStatus(node.score));
     const metricSources = Array.isArray(node.metrics) && node.metrics.length
       ? node.metrics : Array.isArray(node.key_metrics) ? node.key_metrics : [];
     const metrics = metricSources.map((metric) => playerScoreMetricReference(model, metric)).filter(Boolean).slice(0, 2);
     return {
       id: node.id || `story-v3-${index}`,
       phase: node.phase || `phase-${index}`,
+      start: playerScoreNumber(node.start) ?? 0,
+      end: playerScoreNumber(node.end) ?? MATCH_DURATION,
       range: `${formatTime(node.start || 0)}-${formatTime(node.end || MATCH_DURATION)}`,
       title: node.title || PLAYER_SCORE_PHASE_META[node.phase] || "比赛阶段",
       verdict,
@@ -4306,9 +5321,7 @@ function playerScoreBriefLegacyStories(model) {
   const supportRole = position >= 4;
   const checkpoints = (review?.checkpoints || []).slice().sort((left, right) => Number(left.time || 0) - Number(right.time || 0));
   const lanePoint = checkpoints.find((point) => Number(point.time) >= 595) || checkpoints.at(-1);
-  const laneVerdict = review?.verdict === "advantage" ? "advantage"
-    : review?.verdict === "disadvantage" ? "disadvantage"
-      : review ? "even" : "missing";
+  const laneVerdict = normalizePlayerStoryVerdict(review?.verdict, review ? "even" : "missing");
   const supportRoute = review?.support_route || {};
   const supportOutcome = playerScoreSupportRouteOutcome(supportRoute);
   const laneMetrics = lanePoint ? supportRole ? [
@@ -4372,6 +5385,8 @@ function playerScoreBriefLegacyStories(model) {
     {
       id: "story:legacy-lane",
       phase: "laning",
+      start: 0,
+      end: 600,
       range: "00:00-10:00",
       title: "对线期",
       verdict: laneVerdict,
@@ -4387,6 +5402,8 @@ function playerScoreBriefLegacyStories(model) {
     {
       id: "story:legacy-mid",
       phase: "mid_game",
+      start: 600,
+      end: 1200,
       range: "10:00-20:00",
       title: "转线与节奏",
       verdict: midVerdict,
@@ -4405,6 +5422,8 @@ function playerScoreBriefLegacyStories(model) {
     {
       id: "story:legacy-late",
       phase: "late_game",
+      start: 1200,
+      end: MATCH_DURATION,
       range: `20:00-${formatTime(MATCH_DURATION)}`,
       title: "中后期",
       verdict: lateVerdict,
@@ -4423,36 +5442,55 @@ function playerScoreBriefLegacyStories(model) {
   ];
 }
 
-function playerScoreBriefV3Insights(model, kind) {
+function playerScoreBriefV3Insights(model, kind, {
+  limit = kind === "strength" ? 2 : 3,
+} = {}) {
   const briefRefs = kind === "strength"
     ? model.report?.brief?.strengths || []
     : model.report?.brief?.priorities || [];
   const allowedKinds = kind === "strength" ? new Set(["strength", "positive"]) : new Set(["improvement", "problem", "priority"]);
-  const sources = briefRefs.length
-    ? briefRefs.map((ref) => model.rawInsights.find((insight) => String(insight.id) === String(ref))).filter(Boolean)
-    : model.rawInsights.filter((insight) => allowedKinds.has(String(insight.kind || "")));
-  return sources.filter((insight) => kind === "strength"
+  const referenced = briefRefs
+    .map((ref) => model.rawInsights.find((insight) => String(insight.id) === String(ref)))
+    .filter(Boolean);
+  const matching = model.rawInsights.filter((insight) => allowedKinds.has(String(insight.kind || "")));
+  const seen = new Set();
+  const sources = [...referenced, ...matching].filter((insight) => {
+    const identity = insight.id ? `id:${insight.id}` : insight;
+    if (seen.has(identity)) return false;
+    seen.add(identity);
+    return true;
+  });
+  const eligible = sources.filter((insight) => kind === "strength"
     ? Number(insight.confidence || 0) >= 70
     : Number(insight.confidence || 0) >= 55 && (insight.evidence_refs || []).length && insight.time_start != null
-  ).slice(0, kind === "strength" ? 2 : 3).map((insight, index) => ({
-    id: insight.id || `${kind}-v3-${index}`,
-    kind,
-    category: insight.category || "timeline",
-    title: insight.title || (kind === "strength" ? "稳定行为" : "优先问题"),
-    time: playerScoreNumber(insight.time_start),
-    timeEnd: playerScoreNumber(insight.time_end),
-    location: insight.location || "",
-    fact: insight.fact || "",
-    judgment: insight.judgment || "",
-    impact: playerScoreImpactText(insight.impact),
-    action: insight.action || "",
-    confidence: playerScoreNumber(insight.confidence),
-    module: insight.jump_target?.module || playerScoreAdviceModule(insight),
-    evidenceRefs: insight.evidence_refs || [],
-    gateStatus: insight.gate_status || "passed",
-    rootCauseId: insight.root_cause_id || null,
-    rootCause: model.rootCauseById?.get(String(insight.root_cause_id || "")) || null,
-  }));
+  );
+  const selected = limit == null ? eligible : eligible.slice(0, Math.max(0, Number(limit) || 0));
+  return selected.map((insight, index) => {
+    const jumpTarget = normalizePlayerReportJumpTarget(insight.jump_target);
+    return {
+      id: insight.id || `${kind}-v3-${index}`,
+      kind,
+      category: insight.category || "timeline",
+      title: insight.title || (kind === "strength" ? "稳定行为" : "优先问题"),
+      time: playerScoreNumber(insight.time_start),
+      timeEnd: playerScoreNumber(insight.time_end),
+      location: insight.location || "",
+      fact: insight.fact || "",
+      judgment: insight.judgment || "",
+      impact: playerScoreImpactText(insight.impact),
+      action: insight.action || "",
+      confidence: playerScoreNumber(insight.confidence),
+      module: jumpTarget.module || playerScoreAdviceModule(insight),
+      jumpTarget,
+      ordinaryEligible: insight.ordinary_eligible === true,
+      localizationLevel: jumpTarget.locationLevel,
+      occurrences: normalizePlayerReportInsightOccurrences(insight.occurrences),
+      evidenceRefs: insight.evidence_refs || [],
+      gateStatus: insight.gate_status || "passed",
+      rootCauseId: insight.root_cause_id || null,
+      rootCause: model.rootCauseById?.get(String(insight.root_cause_id || "")) || null,
+    };
+  });
 }
 
 function playerScoreBriefLegacyStrengths(model) {
@@ -4767,6 +5805,7 @@ function playerScoreBriefTraining(model, priorities, strengths) {
     trigger: item.trigger || "触发条件待补",
     action: item.action || "",
     successCheck: item.success_check || item.successCheck || "",
+    sourceInsights: Array.isArray(item.source_insights) ? item.source_insights : [],
   }));
   const plans = priorities.map((priority, index) => playerScoreTrainingFromPriority(model, priority, index))
     .filter((plan) => plan.action);
@@ -4792,25 +5831,87 @@ function playerScoreBriefVerdict(model, stories) {
   return text.length <= 90 ? text : `${text.slice(0, 89).replace(/[，；。]+$/u, "")}。`;
 }
 
+function playerScoreBriefStoryImpact(story) {
+  return {
+    advantage: "这段为后续转线、发育或接战创造了领先窗口。",
+    stable: "这段基本完成了该位置在当前阶段的主要任务。",
+    even: "这段没有明显拉开差距，也没有形成可以确认的劣势。",
+    disadvantage: "这段压缩了后续发育或接战空间，值得优先复盘。",
+    issue: "这段出现了可以确认的改进点，是本场优先复盘阶段。",
+    missing: "数据不完整，本段只展示已经记录的事实，不判断对错。",
+  }[story.verdict] || "这段的影响需要结合对应时间点继续复盘。";
+}
+
+function playerScoreBriefStoryAction(model, story) {
+  const position = Number(model.position);
+  const actions = {
+    laning: {
+      1: "先稳住经验区和能安全补到的兵，再用血量换补刀。",
+      2: "优先保证等级与神符窗口，再决定换血或支援。",
+      3: "4号位离线时先保血量和经验，队友回线后再主动施压。",
+      4: "离线前确认3号位能安全接线，并设定控符、叠野或支援目标。",
+      5: "离开1号位前确认兵线、补给和退路，动作完成后及时回线。",
+    },
+    mid_game: {
+      1: "清完安全兵线再衔接野区，关键战斗前提前靠近队伍。",
+      2: "清线后围绕神符、边塔和第一件节奏装安排下一步。",
+      3: "先手装完成后先同步一名能跟伤害的队友再开战。",
+      4: "围绕节奏核心移动，把视野、先手和支援连成一次行动。",
+      5: "目标前先布入口视野并保留救人技能，避免无效露头。",
+    },
+    late_game: {
+      1: "每轮刷钱前确认敌方核心位置、下一目标和退路，再选路线。",
+      2: "在带线与参战之间预留TP或位移，不让队伍先少人接战。",
+      3: "用危险线和先手压力换空间，开战前确认后排能够跟上。",
+      4: "先确认开团与救人职责，把关键技能留给最有价值的目标。",
+      5: "目标刷新前先布眼、带反隐，并和队友一起占住入口。",
+    },
+  };
+  return actions[story.phase]?.[position] || playerScoreRoleTraining(position).action;
+}
+
+function playerScoreBriefStoryNarratives(model, stories, strengths, priorities) {
+  return stories.map((story) => {
+    const start = Number(story.start || 0);
+    const end = Number(story.end ?? MATCH_DURATION);
+    const inStory = (item) => item?.time != null && Number(item.time) >= start && Number(item.time) <= end;
+    const priority = priorities.find(inStory);
+    const strength = strengths.find(inStory);
+    const issue = story.verdict === "issue" || story.verdict === "disadvantage";
+    const insight = issue ? priority || strength : strength || priority;
+    return {
+      ...story,
+      title: simplifyPlayerReportText(story.title)
+        .replace(/^(?:10-20分钟|20分钟后)\s*·\s*/u, ""),
+      summary: simplifyPlayerReportText(story.summary),
+      impact: simplifyPlayerReportText(insight?.impact || insight?.judgment || playerScoreBriefStoryImpact(story)),
+      nextAction: simplifyPlayerReportText(insight?.action || playerScoreBriefStoryAction(model, story)),
+    };
+  });
+}
+
 function playerScoreBriefModel(model) {
-  const nativeV3 = model.model === "player-report/3.0";
+  const nativeReport = model.model === "player-report/4.0"
+    || model.model === "player-report/3.0";
   const stories = playerScoreBriefV3Stories(model);
-  const resolvedStories = nativeV3 ? stories : stories.length ? stories : playerScoreBriefLegacyStories(model);
+  const resolvedStories = nativeReport ? stories : stories.length ? stories : playerScoreBriefLegacyStories(model);
   const v3Strengths = playerScoreBriefV3Insights(model, "strength");
-  const strengths = nativeV3 ? v3Strengths : v3Strengths.length ? v3Strengths : playerScoreBriefLegacyStrengths(model);
+  const strengths = nativeReport ? v3Strengths : v3Strengths.length ? v3Strengths : playerScoreBriefLegacyStrengths(model);
   const v3Priorities = playerScoreBriefV3Insights(model, "improvement");
-  const priorities = nativeV3 ? v3Priorities : v3Priorities.length ? v3Priorities : playerScoreBriefLegacyPriorities(model);
+  const priorities = nativeReport ? v3Priorities : v3Priorities.length ? v3Priorities : playerScoreBriefLegacyPriorities(model);
   const training = playerScoreBriefTraining(model, priorities, strengths);
   const focus = model.report?.brief?.next_match_focus || training[0]?.action || playerScoreRoleTraining(model.position).action;
+  const narratedStories = playerScoreBriefStoryNarratives(model, resolvedStories, strengths, priorities);
   return {
     verdict: playerScoreBriefVerdict(model, resolvedStories),
     focus,
     domains: playerScoreBriefDomains(model),
-    stories: resolvedStories,
+    stories: narratedStories,
     strengths,
     priorities,
     training,
-    source: nativeV3 ? "v3" : "compat",
+    source: model.model === "player-report/4.0" ? "v4" : nativeReport ? "v3" : "compat",
+    localizationStrict: model.report?.localization_model === "player-report-localization/1.0",
   };
 }
 
@@ -4819,26 +5920,31 @@ function renderPlayerScoreHeader(model) {
   const hero = model.hero;
   const opponent = safeHero(model.counterpartSlot);
   const match = state.currentAnalysis?.match || {};
+  const briefMode = state.readingMode !== "professional";
+  const briefPriority = model.simpleReport?.improvements?.[0] || model.brief.priorities[0] || null;
   const evidence = playerScoreEvidenceLevel(model.evidenceLevel);
   const confidence = model.confidence == null ? "--" : `${Math.round(model.confidence)}%`;
   const score = model.canShowOverall ? Math.round(model.overallScore) : "--";
   const grade = model.grade || (model.hasReport ? "证据不足" : "待生成");
   const resultKnown = typeof match.radiant_win === "boolean";
   const won = resultKnown ? (hero.team === "radiant") === match.radiant_win : null;
+  const scoreSummary = briefMode
+    ? `<span class="player-score-overall static"><small>综合表现</small><strong>${score}</strong><b>${escapeHtml(grade)}</b></span>
+      <span><small>明确优点</small><strong class="fact">${model.simpleReport?.strengths?.length || 0} 项</strong></span>
+      <span><small>需要改进</small><strong class="${model.simpleReport?.improvements?.length ? "aggregate" : "fact"}">${model.simpleReport?.improvements?.length || 0} 项</strong></span>`
+    : `<button class="player-score-overall" type="button" data-player-score-evidence-type="score-audit" data-player-score-evidence-id="overall" title="查看综合分可重算审计"><small>综合分</small><strong>${score}</strong><b>${escapeHtml(grade)}</b><i data-lucide="chevron-right"></i></button>
+      <span><small>置信度</small><strong>${confidence}</strong></span>
+      <span><small>证据</small><strong class="${evidence.className}">${evidence.label}</strong></span>`;
   root.innerHTML = `
     <div class="player-score-identity">
       <img src="${heroImage(hero.token)}" alt="${escapeHtml(hero.name)}">
-      <span><small>${hero.team === "radiant" ? "天辉" : "夜魇"}${won == null ? "" : won ? " · 胜利" : " · 失败"}${hero.me ? " · 我" : ""}</small><strong>${escapeHtml(hero.name)} · ${escapeHtml(hero.player)}</strong><em>${escapeHtml(model.role.label)} · 角色置信度 ${model.roleConfidence == null ? "--" : `${Math.round(model.roleConfidence)}%`}</em></span>
+      <span><small>${hero.team === "radiant" ? "天辉" : "夜魇"}${won == null ? "" : won ? " · 胜利" : " · 失败"}${hero.me ? " · 我" : ""}</small><strong>${escapeHtml(hero.name)} · ${escapeHtml(hero.player)}</strong><em>${escapeHtml(model.role.label)}${briefMode ? "" : ` · 角色置信度 ${model.roleConfidence == null ? "--" : `${Math.round(model.roleConfidence)}%`}`}</em></span>
     </div>
     <button class="player-score-counterpart" type="button" data-player-score-slot="${opponent.slot}" title="切换到对位玩家">
       <span><small>主要对位</small><strong>${escapeHtml(opponent.name)}</strong><em>${positionLabel(opponent.position)}</em></span><img src="${heroImage(opponent.token)}" alt="${escapeHtml(opponent.name)}"><i data-lucide="arrow-left-right"></i>
     </button>
-    <div class="player-score-headline"><small>${model.legacy ? "兼容旧报告 · 只输出有证据的行为结论" : "player-report/3.0 · 本场结论"}</small><strong>${escapeHtml(model.brief.verdict)}</strong><em>下一局：${escapeHtml(model.brief.focus)}</em></div>
-    <div class="player-score-summary">
-      <span class="player-score-overall"><small>职责完成度</small><strong>${score}</strong><b>${escapeHtml(grade)}</b></span>
-      <span><small>置信度</small><strong>${confidence}</strong></span>
-      <span><small>证据</small><strong class="${evidence.className}">${evidence.label}</strong></span>
-    </div>`;
+    <div class="player-score-headline"><small>${briefMode ? "本场一句话" : model.legacy ? "兼容旧报告 · 只输出有证据的行为结论" : "player-report/4.0 · 本场结论"}</small><strong>${escapeHtml(briefMode ? simplifyPlayerReportText(model.brief.verdict) : model.brief.verdict)}</strong><em>${briefMode ? briefPriority ? "优先改进" : "下局重点" : "下一局"}：${escapeHtml(briefMode ? simplifyPlayerReportText(briefPriority?.title || model.brief.focus) : model.brief.focus)}</em></div>
+    <div class="player-score-summary">${scoreSummary}</div>`;
   installImageFallback(root, heroImage("unknown"));
   refreshIcons(root);
 }
@@ -4871,11 +5977,54 @@ function playerScoreDimensionHtml(dimension) {
   const active = state.selectedPlayerScoreEvidence?.type === "dimension" && state.selectedPlayerScoreEvidence.id === dimension.key;
   const score = dimension.score == null ? "--" : Math.round(dimension.score);
   const confidence = dimension.confidence == null ? "待补证据" : `置信度 ${Math.round(dimension.confidence)}%`;
+  const scoreTrail = dimension.baseScore == null
+    ? confidence
+    : `基础 ${Math.round(dimension.baseScore)} · 修正 ${signedValue(dimension.behaviorModifier || 0)} · ${confidence}`;
   return `<button class="player-score-dimension ${dimension.status} ${active ? "active" : ""}" type="button" data-player-score-evidence-type="dimension" data-player-score-evidence-id="${dimension.key}">
-    <span class="player-score-dimension-name"><i data-lucide="${dimension.icon}"></i><span><strong>${dimension.label}</strong><small>位置权重 ${dimension.roleWeight}% · ${confidence}</small></span></span>
+    <span class="player-score-dimension-name"><i data-lucide="${dimension.icon}"></i><span><strong>${dimension.label}</strong><small>位置权重 ${dimension.roleWeight}% · ${scoreTrail}</small></span></span>
     <span class="player-score-dimension-meter ${dimension.score == null ? "missing" : ""}"><i style="width:${dimension.score == null ? 0 : clamp(dimension.score, 0, 100)}%"></i></span>
     <b>${score}</b>
   </button>`;
+}
+
+function playerScorePlainText(value, fallback = "") {
+  return simplifyPlayerReportText(String(value || fallback));
+}
+
+function renderPlayerScoreImportantMoments(model) {
+  const moments = (model.simpleReport?.timeline || [])
+    .filter((moment) => moment.importantEvent);
+  if (!moments.length) {
+    return `<section class="player-score-important-board"><header><span><small>统一事件候选池</small><strong>重要时刻</strong></span><em>候选 ${model.eventCandidates.length} 条</em></header><div class="player-score-data-gap compact"><span>当前没有同时通过重要性、定位和时间范围门槛的事件。</span></div></section>`;
+  }
+  const typeLabel = (moment) => {
+    const types = moment.relatedEventTypes || [];
+    if (types.includes("combat") || types.includes("death") || types.includes("teleport")) return "战斗";
+    if (types.includes("ward")) return "视野";
+    if (types.includes("purchase") || types.includes("item_delivery")) return "装备";
+    if (types.includes("objective")) return "目标";
+    if (types.includes("lane") || types.includes("lane_pressure")
+      || types.includes("suspected_pull") || types.includes("level_spike")) return "对线";
+    if (types.includes("rune_control") || types.includes("support_route")) return "节奏";
+    if (types.includes("farm")) return "发育";
+    return "事实";
+  };
+  const rows = moments.map((moment) => {
+    const presented = presentSimpleInsight(moment);
+    const time = presented.jumpTarget.rangeStart ?? presented.time ?? 0;
+    const end = presented.jumpTarget.rangeEnd ?? presented.timeEnd ?? time;
+    const location = presented.location
+      || (presented.jumpTarget.mapFocus?.region
+        ? regionName(presented.jumpTarget.mapFocus.region) : "地图已定位");
+    const tone = presented.kind === "strength" ? "strength"
+      : presented.kind === "improvement" ? "improvement" : "context";
+    return `<button class="player-score-important-row ${tone}" type="button" data-player-score-review="${escapeHtml(presented.id)}">
+      <time>${formatTime(time)}-${formatTime(end)}</time>
+      <span><small>${typeLabel(moment)} · ${escapeHtml(location)}</small><strong>${escapeHtml(playerScorePlainText(presented.title, "比赛关键时刻"))}</strong><em>${escapeHtml(playerScorePlainText(presented.fact, "已定位到具体 Replay 片段。"))}</em></span>
+      <i data-lucide="arrow-up-right"></i>
+    </button>`;
+  }).join("");
+  return `<section class="player-score-important-board"><header><span><small>统一事件候选池筛选结果</small><strong>所有重要时刻</strong></span><em>入选 ${moments.length} / 候选 ${model.eventCandidates.length}</em></header><div>${rows}</div></section>`;
 }
 
 function renderPlayerScoreOverview(model) {
@@ -4895,55 +6044,169 @@ function renderPlayerScoreOverview(model) {
     <section class="player-score-dimension-board"><header><span><small>十项公共维度</small><strong>${escapeHtml(model.role.label)}权重</strong></span><em>缺失指标不按 0 分</em></header><div class="player-score-dimension-grid">${model.dimensions.map(playerScoreDimensionHtml).join("")}</div></section>
     <section class="player-score-priority-board"><header><span><small>下一局训练重点</small><strong>稳定项与优先复核</strong></span><em>最多三条建议</em></header><div class="player-score-strength-list">${strengths}</div><div class="player-score-advice-list">${advice}</div></section>
     <section class="player-score-phase-board"><header><span><small>固定检查点 + 动态阶段</small><strong>分阶段表现</strong></span></header><div>${phaseHtml}</div></section>
+    ${renderPlayerScoreImportantMoments(model)}
   </div>`;
 }
 
-function renderPlayerScoreBrief(model) {
-  const brief = model.brief;
-  const domainHtml = brief.domains.map((domain) => {
-    const score = domain.score == null ? "--" : Math.round(domain.score);
-    const confidence = domain.confidence == null ? "证据不足" : `${Math.round(domain.confidence)}% 可信`;
-    const tone = domain.score == null ? "missing" : domain.score >= 68 ? "positive" : domain.score < 52 ? "negative" : "stable";
-    return `<button class="player-score-brief-domain ${tone}" type="button" data-player-score-open-dimension="${escapeHtml(domain.keys[0])}" title="在深度分析中查看${escapeHtml(domain.label)}"><span><i data-lucide="${domain.icon}"></i>${escapeHtml(domain.label)}</span><strong>${score}</strong><small>${confidence}</small></button>`;
-  }).join("");
-  const storyHtml = brief.stories.map((story, index) => {
-    const meta = PLAYER_SCORE_BRIEF_VERDICT_META[story.verdict] || PLAYER_SCORE_BRIEF_VERDICT_META.missing;
-    const metrics = (story.metrics || []).slice(0, 2).map((metric) => `<span><small>${escapeHtml(metric.label || "关键指标")}</small><strong>${escapeHtml(metric.value ?? "--")}</strong></span>`).join("");
-    return `<article class="player-score-story-row ${meta.className}">
-      <button class="player-score-story-main" type="button" data-player-score-evidence-type="brief-story" data-player-score-evidence-id="${escapeHtml(story.id)}" data-player-score-time="${Number(story.time || 0)}">
-        <span class="player-score-story-index">${String(index + 1).padStart(2, "0")}</span>
-        <span class="player-score-story-copy"><small>${escapeHtml(story.range)} · <b>${meta.label}</b></small><strong>${escapeHtml(story.title)}</strong><em>${escapeHtml(story.summary)}</em></span>
-        <span class="player-score-story-metrics">${metrics}</span>
+function renderSimplePlayerReport(model) {
+  const simpleReport = model.simpleReport || buildSimplePlayerReport({
+    dimensions: model.dimensions,
+    insights: [],
+    importantEvents: model.importantEvents,
+  });
+  const training = simpleReport.primaryTraining
+    || model.brief?.training?.[0]
+    || playerScoreRoleTraining(model.position);
+  const domainMeta = {
+    lane: { icon: "git-compare-arrows", dimension: "lane_execution" },
+    farm: { icon: "wheat", dimension: "farm_efficiency" },
+    tempo: { icon: "navigation", dimension: "map_tempo" },
+    combat: { icon: "swords", dimension: "combat_output" },
+    vision: { icon: "eye", dimension: "vision_team" },
+    execution: { icon: "mouse-pointer-click", dimension: "observable_execution" },
+  };
+  const statusMeta = {
+    good: { label: "做得好", tone: "positive", icon: "circle-check" },
+    stable: { label: "基本正常", tone: "stable", icon: "circle-dot" },
+    improve: { label: "需要改进", tone: "negative", icon: "circle-alert" },
+    insufficient: { label: "证据不足", tone: "missing", icon: "circle-dashed" },
+  };
+  const insightMeta = (insight) => {
+    const target = insight.jumpTarget;
+    const start = target.rangeStart ?? insight.time;
+    const end = target.rangeEnd ?? insight.timeEnd;
+    const range = start == null
+      ? "时间待补"
+      : end != null && end !== start
+        ? `${formatTime(start)}-${formatTime(end)}`
+        : formatTime(start);
+    const location = insight.location
+      || (target.mapFocus?.region ? regionName(target.mapFocus.region) : "");
+    return { range, location };
+  };
+  const occurrenceHtml = (insight) => {
+    if (!insight.occurrences.length) return "";
+    const buttons = insight.occurrences.map((occurrence, index) => {
+      const delta = occurrence.arrivalDeltaSeconds == null
+        ? ""
+        : `${occurrence.arrivalDeltaSeconds >= 0 ? "+" : ""}${occurrence.arrivalDeltaSeconds}秒到场`;
+      const label = occurrence.label || [
+        occurrence.time == null ? "" : formatTime(occurrence.time),
+        occurrence.region ? regionName(occurrence.region) : "",
+        delta,
+      ].filter(Boolean).join(" · ");
+      return `<button type="button" data-player-score-review-occurrence="${escapeHtml(insight.id)}" data-player-score-occurrence-index="${index}" title="复盘 ${escapeHtml(label)}"><i data-lucide="map-pin"></i><span>${escapeHtml(label || `发生点 ${index + 1}`)}</span><i data-lucide="arrow-up-right"></i></button>`;
+    }).join("");
+    return `<details class="simple-report-occurrences"><summary>查看具体发生点（${insight.occurrences.length}）</summary><div>${buttons}</div></details>`;
+  };
+  const insightCard = (source, tone) => {
+    const insight = presentSimpleInsight(source);
+    const meta = insightMeta(insight);
+    const strength = tone === "strength";
+    const fact = playerScorePlainText(insight.fact, "这条结论已经定位到具体片段，事实说明仍需补充。");
+    const impact = playerScorePlainText(
+      insight.impact,
+      strength ? "这次处理为队伍保留了正向收益。" : "目前只能确认问题发生，直接后果还需结合片段复核。",
+    );
+    const action = playerScorePlainText(
+      insight.action,
+      strength ? "在相同场景继续保持这套处理。" : "遇到相同局面时，先停一下并重新确认队友、敌人和目标位置。",
+    );
+    return `<article class="simple-report-insight-card ${tone}">
+      <button class="simple-report-insight-main" type="button" data-player-score-review="${escapeHtml(insight.id)}">
+        <span class="simple-report-insight-icon"><i data-lucide="${strength ? "circle-check" : "circle-alert"}"></i></span>
+        <span class="simple-report-insight-copy">
+          <small><time>${escapeHtml(meta.range)}</time>${meta.location ? `<span>${escapeHtml(meta.location)}</span>` : ""}</small>
+          <strong>${escapeHtml(playerScorePlainText(insight.title, strength ? "值得保持的处理" : "需要复核的处理"))}</strong>
+          <span class="simple-report-insight-line"><b>发生了什么</b><em>${escapeHtml(fact)}</em></span>
+          <span class="simple-report-insight-line impact"><b>${strength ? "带来的好处" : "造成的影响"}</b><em>${escapeHtml(impact)}</em></span>
+          <span class="simple-report-insight-line action"><b>${strength ? "怎么保持" : "下次怎么做"}</b><em>${escapeHtml(action)}</em></span>
+        </span>
+        <span class="player-score-review-command">查看这一波<i data-lucide="arrow-up-right"></i></span>
       </button>
-      <button class="icon-button quiet player-score-story-jump" type="button" data-player-score-jump="${escapeHtml(story.module)}" data-player-score-time="${Number(story.time || 0)}" title="查看对应片段"><i data-lucide="arrow-up-right"></i></button>
+      ${occurrenceHtml(insight)}
     </article>`;
+  };
+  const domainHtml = simpleReport.domains.map((domain) => {
+    const meta = domainMeta[domain.key] || domainMeta.execution;
+    const status = statusMeta[domain.status] || statusMeta.insufficient;
+    return `<button class="simple-report-domain ${status.tone}" type="button" data-player-score-open-dimension="${meta.dimension}" title="在专业分析中查看${escapeHtml(domain.label)}明细">
+      <i data-lucide="${meta.icon}"></i>
+      <span><strong>${escapeHtml(domain.label)}</strong><small>${status.label}</small></span>
+      <i class="simple-report-domain-status" data-lucide="${status.icon}"></i>
+    </button>`;
   }).join("");
-  const strengthHtml = brief.strengths.length ? brief.strengths.map((item) => `<article class="player-score-brief-insight strength">
-    <button type="button" data-player-score-evidence-type="brief-insight" data-player-score-evidence-id="${escapeHtml(item.id)}" data-player-score-time="${Number(item.time || 0)}"><i data-lucide="circle-check"></i><span><small>${item.time == null ? "本场稳定行为" : `${formatTime(item.time)} · ${Math.round(Number(item.confidence || 0))}%`}</small><strong>${escapeHtml(item.title)}</strong><em>${escapeHtml(item.fact)}</em></span></button>
-    <button class="text-command" type="button" data-player-score-jump="${escapeHtml(item.module)}" data-player-score-time="${Number(item.time || 0)}">查看片段</button>
-  </article>`).join("") : `<div class="player-score-brief-empty"><i data-lucide="circle-dashed"></i><span><strong>正向证据还不够集中</strong><small>报告不会只按最高分或比赛胜负补写优点。</small></span></div>`;
-  const priorityHtml = brief.priorities.length ? brief.priorities.map((item, index) => `<article class="player-score-brief-insight priority">
-    <button type="button" data-player-score-evidence-type="brief-insight" data-player-score-evidence-id="${escapeHtml(item.id)}" data-player-score-time="${Number(item.time || 0)}"><span class="player-score-priority-number">${index + 1}</span><span><small>${item.time == null ? "行为时间待补" : `${formatTime(item.time)}${item.location ? ` · ${escapeHtml(item.location)}` : ""}`} · ${Math.round(Number(item.confidence || 0))}%</small><strong>${escapeHtml(item.title)}</strong><em>${escapeHtml(item.fact)}</em><b>${escapeHtml(item.action)}</b></span></button>
-    <button class="text-command" type="button" data-player-score-jump="${escapeHtml(item.module)}" data-player-score-time="${Number(item.time || 0)}">查看证据</button>
-  </article>`).join("") : `<div class="player-score-brief-empty"><i data-lucide="shield-check"></i><span><strong>没有高置信度行为问题</strong><small>当前只展示可确认事实，不用低分维度凑满三条建议。</small></span></div>`;
-  const trainingHtml = brief.training.map((item, index) => `<li><span>${index + 1}</span><p><small>${escapeHtml(item.trigger)}</small><strong>${escapeHtml(item.action)}</strong><em>完成标准：${escapeHtml(item.successCheck || "对应证据可以在下一局复核")}</em></p></li>`).join("");
-  const protocol = brief.source === "v3" ? "V3 结构化报告" : "兼容旧报告 · 行为结论按证据门槛生成";
-  return `<div class="player-score-brief">
-    <header class="player-score-brief-lead">
-      <div class="player-score-brief-verdict"><span><i data-lucide="file-check-2"></i>${escapeHtml(protocol)}</span><h2>${escapeHtml(brief.verdict)}</h2><p><b>下一局优先</b>${escapeHtml(brief.focus)}</p></div>
-      <div class="player-score-brief-domains">${domainHtml}</div>
-    </header>
-    <div class="player-score-brief-columns">
-      <section class="player-score-story-board">
-        <header><span><small>按时间讲清比赛过程</small><strong>三段比赛故事</strong></span><em>点击章节查看证据</em></header>
-        <div>${storyHtml}</div>
-      </section>
-      <div class="player-score-brief-review">
-        <section class="player-score-brief-section strengths"><header><span><small>有具体事实的正向行为</small><strong>本场优点</strong></span><em>${brief.strengths.length} 项</em></header><div>${strengthHtml}</div></section>
-        <section class="player-score-brief-section priorities"><header><span><small>按可改进价值排序</small><strong>主要问题</strong></span><em>${brief.priorities.length} 项</em></header><div>${priorityHtml}</div></section>
-        <section class="player-score-training"><header><span><small>下一局可以直接执行</small><strong>训练清单</strong></span></header><ol>${trainingHtml}</ol></section>
+  const strengthHtml = simpleReport.strengths.map(
+    (insight) => insightCard(insight, "strength"),
+  ).join("") || `<div class="simple-report-empty"><i data-lucide="circle-dashed"></i><span><strong>暂时没有足够明确的个人优点</strong><small>不会根据胜负或总分强行补写优点。</small></span></div>`;
+  const improvementHtml = simpleReport.improvements.map(
+    (insight) => insightCard(insight, "improvement"),
+  ).join("") || `<div class="simple-report-empty"><i data-lucide="shield-check"></i><span><strong>没有能够明确归到你身上的问题</strong><small>分数偏低不等于一定做错；证据不够时不会硬批评。</small></span></div>`;
+  const activeFilter = ["strength", "improvement", "context"].includes(state.simpleReportFilter)
+    ? state.simpleReportFilter
+    : "all";
+  const filteredTimeline = simpleReport.timeline.filter((insight) => (
+    activeFilter === "all"
+    || activeFilter === "strength" && ["strength", "positive"].includes(insight.kind)
+    || activeFilter === "improvement" && ["improvement", "problem", "priority"].includes(insight.kind)
+    || activeFilter === "context" && insight.kind === "context"
+  ));
+  const timelineHtml = filteredTimeline.map((source) => {
+    const insight = presentSimpleInsight(source);
+    const meta = insightMeta(insight);
+    const strength = ["strength", "positive"].includes(insight.kind);
+    const context = insight.kind === "context";
+    return `<button class="simple-report-timeline-row ${context ? "context" : strength ? "strength" : "improvement"}" type="button" data-player-score-review="${escapeHtml(insight.id)}">
+      <time>${escapeHtml(meta.range)}</time>
+      <i data-lucide="${context ? "map-pin" : strength ? "circle-check" : "circle-alert"}"></i>
+      <span><strong>${escapeHtml(playerScorePlainText(insight.title))}</strong><small>${escapeHtml([meta.location, playerScorePlainText(insight.fact)].filter(Boolean).join(" · "))}</small></span>
+      <i data-lucide="arrow-up-right"></i>
+    </button>`;
+  }).join("") || `<div class="simple-report-empty compact"><i data-lucide="list-x"></i><span><strong>当前筛选没有结论</strong><small>切换“全部”可查看整场已确认内容。</small></span></div>`;
+  const trainingAction = playerScorePlainText(training.action || model.brief?.focus, "下一局先确认职责，再决定当前这一分钟最重要的事。");
+  const trainingTrigger = playerScorePlainText(training.trigger, "遇到相同局面时");
+  const trainingCheck = playerScorePlainText(training.successCheck, "下一局能在对应时间点重新检查结果");
+
+  return `<div class="player-score-simple-report">
+    <header class="simple-report-lead">
+      <div class="simple-report-verdict">
+        <span><i data-lucide="scroll"></i>整场复盘 · ${escapeHtml(model.role.label)}</span>
+        <h2>${escapeHtml(playerScorePlainText(model.brief?.verdict, "这场的明确结论仍在生成中。"))}</h2>
+        <p>已确认 <b>${simpleReport.strengths.length}</b> 个做得好的地方、<b>${simpleReport.improvements.length}</b> 个需要改进的地方和 <b>${simpleReport.contexts.length}</b> 个关键事实，全部可以回到对应片段。</p>
       </div>
+      <div class="simple-report-training">
+        <span><i data-lucide="target"></i>下一局训练目标</span>
+        <strong>${escapeHtml(trainingAction)}</strong>
+        <small><b>什么时候做</b>${escapeHtml(trainingTrigger)}</small>
+        <small><b>怎样算完成</b>${escapeHtml(trainingCheck)}</small>
+      </div>
+    </header>
+    <section class="simple-report-domain-section" aria-label="六项比赛表现">
+      <header><span><small>先看哪里好、哪里要改</small><strong>六项比赛表现</strong></span><em>点击任一项可看专业拆解</em></header>
+      <div class="simple-report-domains">${domainHtml}</div>
+    </section>
+    <div class="simple-report-conclusion-grid">
+      <section class="simple-report-conclusion-section strengths">
+        <header><span><small>这场值得继续保持</small><strong>全场做得好</strong></span><em>${simpleReport.strengths.length} 条</em></header>
+        <div>${strengthHtml}</div>
+      </section>
+      <section class="simple-report-conclusion-section improvements">
+        <header><span><small>按发生顺序逐条复核</small><strong>全场需要改进</strong></span><em>${simpleReport.improvements.length} 条</em></header>
+        <div>${improvementHtml}</div>
+      </section>
     </div>
+    <section class="simple-report-timeline-section">
+      <header>
+        <span><small>从开局到结束，保留所有真正重要的节点</small><strong>按时间查看所有重要时刻</strong></span>
+        <div class="simple-report-filters" role="group" aria-label="结论筛选">
+          <button type="button" class="${activeFilter === "all" ? "active" : ""}" data-simple-report-filter="all">全部 ${simpleReport.timeline.length}</button>
+          <button type="button" class="${activeFilter === "strength" ? "active" : ""}" data-simple-report-filter="strength">做得好 ${simpleReport.strengths.length}</button>
+          <button type="button" class="${activeFilter === "improvement" ? "active" : ""}" data-simple-report-filter="improvement">需改进 ${simpleReport.improvements.length}</button>
+          <button type="button" class="${activeFilter === "context" ? "active" : ""}" data-simple-report-filter="context">重要事实 ${simpleReport.contexts.length}</button>
+        </div>
+      </header>
+      <div class="simple-report-timeline">${timelineHtml}</div>
+    </section>
   </div>`;
 }
 
@@ -4966,6 +6229,37 @@ function renderPlayerScoreLane(model) {
     <section class="player-score-lane-checkpoints"><header><strong>3 / 5 / 7 / 10 分钟检查点</strong><small>点击时间点查看证据</small></header><div>${checkpointHtml}</div></section>
     <section class="player-score-support-review"><header><strong>${support ? `${positionLabel(support.position)} ${escapeHtml(support.name)} · 离线价值` : "单人线职责"}</strong><small>置信度 ${Number(review.confidence || 0)}%</small></header>${support ? `<div><span><small>在路</small><strong>${Number(route.lane_presence_pct || 0).toFixed(1)}%</strong></span><span><small>离线</small><strong>${formatTime(route.away_seconds || 0)}</strong></span><span><small>核心单吃经验</small><strong>${formatTime(route.core_solo_xp_seconds || 0)}</strong></span><span><small>离线收益</small><strong>叠野 ${Number(route.stacks || 0)} · 控符 ${Number(route.runes || 0)} · 助攻 ${Number(route.away_assists || 0)}</strong></span></div><p>${escapeHtml(route.interpretation || "辅助路线影响仍需复核")}</p>` : `<p>中路按补刀、反补、等级节点、经验与线上阵亡评估，不套用边路经验分摊模型。</p>`}</section>
   </div>`;
+}
+
+function renderPlayerScoreP1Audit(model, eventTypes, title, subtitle) {
+  const allowed = new Set(eventTypes);
+  const labels = {
+    lane_pressure: "兵线空间",
+    item_delivery: "装备到手",
+    rune_control: "抢符收益",
+    support_route: "辅助离线",
+    suspected_pull: "疑似拉野",
+    level_spike: "等级窗口",
+  };
+  const rows = model.eventCandidates
+    .filter((candidate) => allowed.has(String(candidate.event_type || "")))
+    .sort((left, right) => Number(left.time_start || 0) - Number(right.time_start || 0));
+  const content = rows.map((candidate) => {
+    const jump = normalizePlayerReportJumpTarget(candidate.jump_target);
+    const start = Number(candidate.time_start ?? jump.rangeStart ?? 0);
+    const end = Number(candidate.time_end ?? jump.rangeEnd ?? start);
+    const location = jump.mapFocus?.region
+      ? regionName(jump.mapFocus.region)
+      : "位置已记录";
+    const kind = candidate.kind === "strength"
+      ? "strength" : candidate.kind === "improvement" ? "improvement" : "context";
+    return `<button class="player-score-p1-row ${kind}" type="button" data-player-score-review="${escapeHtml(candidate.id)}">
+      <time>${formatTime(start)}${end > start ? `<small>至 ${formatTime(end)}</small>` : ""}</time>
+      <span><small>${escapeHtml(labels[candidate.event_type] || "节奏事实")} · ${escapeHtml(location)} · 置信度 ${Math.round(Number(candidate.confidence || 0))}%</small><strong>${escapeHtml(candidate.title || "可复核事实")}</strong><em>${escapeHtml(candidate.fact || "打开对应片段查看证据。")}</em></span>
+      <i data-lucide="arrow-up-right"></i>
+    </button>`;
+  }).join("") || `<div class="player-score-data-gap compact"><span>本场没有生成这组 P1 事实；旧分析包需重新解析。</span></div>`;
+  return `<section class="player-score-p1-audit"><header><span><small>${escapeHtml(subtitle)}</small><strong>${escapeHtml(title)}</strong></span><em>${rows.length} 条可定位事实</em></header><div>${content}</div></section>`;
 }
 
 function renderPlayerScoreFarm(model) {
@@ -4993,6 +6287,7 @@ function renderPlayerScoreFarm(model) {
     <section class="player-score-farm-map"><header><span><small>真实 Dota 地图</small><strong>空间收益与移动路线</strong></span><button class="text-command" type="button" data-player-score-jump="farm">打开完整打钱分析</button></header><div class="player-score-map-canvas"><img src="/assets/dota-map-740.webp" alt="Dota 2 打钱地图"><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polyline points="${route}"></polyline></svg>${heat}${currentMarker}</div></section>
     <section class="player-score-farm-summary"><header><span><small>收入来源</small><strong>本场资源构成</strong></span></header><div><span><small>已归因总收益</small><strong>${total.toLocaleString("zh-CN")}</strong></span><span><small>兵线</small><strong>${lane.toLocaleString("zh-CN")} · ${total ? Math.round(lane / total * 100) : 0}%</strong></span><span><small>野区</small><strong>${neutral.toLocaleString("zh-CN")} · ${total ? Math.round(neutral / total * 100) : 0}%</strong></span><span><small>路线复核窗口</small><strong>${diagnostics.length}</strong></span></div></section>
     <section class="player-score-farm-diagnostics"><header><span><small>事实与候选分开</small><strong>路线复核</strong></span><em>${diagnostics.filter((item) => item.recommendation_enabled).length} 条通过门禁</em></header><div>${diagnosticHtml}</div></section>
+    ${renderPlayerScoreP1Audit(model, ["lane_pressure", "item_delivery"], "兵线与装备节奏", "交汇点、塔区、推进深度和购买到可用的完整延误")}
   </div>`;
 }
 
@@ -5019,6 +6314,7 @@ function renderPlayerScoreTempo(model) {
     </section>
     <section class="player-score-domain-stories"><header><span><small>固定区间 + 动态阶段</small><strong>地图节奏过程</strong></span><em>事实不等同于好坏</em></header><div>${storyRows}</div></section>
     <section class="player-score-domain-events"><header><span><small>TP、神符与目标</small><strong>可归属事件</strong></span><em>${events.length} 条</em></header><div>${eventRows}</div></section>
+    ${renderPlayerScoreP1Audit(model, ["rune_control", "support_route", "suspected_pull", "level_spike"], "控符、离线与等级窗口", "抢符收益、核心线上代价、疑似拉野与关键等级后的 45 秒")}
   </div>`;
 }
 
@@ -5029,7 +6325,8 @@ function playerScoreFightsForSlot(slot) {
 
 function renderPlayerScoreCombat(model) {
   const fights = playerScoreFightsForSlot(model.hero.slot);
-  if (!fights.length) return `<div class="player-score-data-gap"><i data-lucide="shield-off"></i><strong>没有可归属的战斗片段</strong><span>参与者证据不足时不评价到场、技能职责或战场存在率。</span></div>`;
+  const timingFacts = model.combatTiming?.facts || [];
+  if (!fights.length && !timingFacts.length) return `<div class="player-score-data-gap"><i data-lucide="shield-off"></i><strong>没有可归属的战斗片段</strong><span>参与者证据不足时不评价到场、技能职责或战场存在率。</span></div>`;
   const rows = fights.map((fight) => {
     const contribution = fightContributions(fight).find((row) => Number(row.slot) === Number(model.hero.slot));
     const gate = contribution?.responsibility_gate;
@@ -5041,14 +6338,73 @@ function renderPlayerScoreCombat(model) {
     return `<button class="player-score-combat-row" type="button" data-player-score-evidence-type="combat" data-player-score-evidence-id="${escapeHtml(fight.id)}" data-player-score-time="${contactStart}">
       <time>${formatTime(contactStart)}<small>${Math.max(0, contactEnd - contactStart).toFixed(1)} 秒</small></time><span><strong>${escapeHtml(fight.title)}</strong><small>${escapeHtml(fight.result || "战斗结果待确认")}</small><em>${contribution ? `伤害 ${Number(contribution.damage || 0).toLocaleString("zh-CN")} · 在场 ${Number(contribution.presencePct || 0)}% · 到场 +${Number(contribution.arrivalDelay || 0)}s` : "缺少个人贡献归属"}</em></span><span class="player-score-combat-gate ${gate ? gateMeta.className : "insufficient"}"><small>${gate ? gateMeta.label : "职责证据不足"}</small><strong>${score}</strong></span><i data-lucide="chevron-right"></i>
     </button>`;
-  }).join("");
+  }).join("") || `<div class="player-score-data-gap compact"><span>没有可归属的逐场职责数据</span></div>`;
   const contributions = fights.map((fight) => fightContributions(fight).find((row) => Number(row.slot) === Number(model.hero.slot))).filter(Boolean);
   const totalDamage = contributions.reduce((sum, row) => sum + Number(row.damage || 0), 0);
   const averagePresence = contributions.length ? contributions.reduce((sum, row) => sum + Number(row.presencePct || 0), 0) / contributions.length : null;
   const passedGates = contributions.filter((row) => row.responsibility_gate?.status === "passed").length;
   const teamfights = fights.filter((fight) => fight.kind === "teamfight").length;
+  const suppressionLabels = {
+    role_confidence_low: "位置置信度不足",
+    invalid_coordinates: "战场坐标缺失",
+    snapshot_coverage_low: "位置采样不足",
+    player_dead: "开战时已阵亡",
+    arrival_unreachable: "首轮交战前不可达",
+  };
+  const feasibilityMeta = {
+    reachable: { label: "确认可到场", tone: "reachable" },
+    unreachable: { label: "距离不足", tone: "suppressed" },
+    dead: { label: "已阵亡", tone: "suppressed" },
+    insufficient_evidence: { label: "证据不足", tone: "suppressed" },
+  };
+  const timingRows = timingFacts.map((fact) => {
+    const fightId = String(fact.fight_id || "");
+    const fight = COMBAT_SEGMENTS.find((item) => String(item.id) === fightId);
+    const engageTime = playerScoreNumber(fact.team_engage_time ?? fact.time);
+    const arrivalTime = playerScoreNumber(fact.player_spatial_arrival_time);
+    const delta = playerScoreNumber(fact.arrival_delta_seconds);
+    const firstActionTime = playerScoreNumber(
+      fact.first_meaningful_action_time ?? fact.first_combat_action_time,
+    );
+    const firstRotationEnd = playerScoreNumber(fact.first_rotation_end);
+    const suppressedReasons = Array.isArray(fact.suppressed_reasons)
+      ? fact.suppressed_reasons.map((reason) => suppressionLabels[reason] || reason)
+      : [];
+    const feasibility = feasibilityMeta[fact.join_feasibility]
+      || { label: "待确认", tone: "suppressed" };
+    const rotationDelay = arrivalTime == null || firstRotationEnd == null
+      ? null
+      : Math.max(0, arrivalTime - firstRotationEnd);
+    const rotationText = arrivalTime == null || firstRotationEnd == null
+      ? "待确认"
+      : fact.missed_first_rotation === true
+        ? `错过 ${rotationDelay} 秒`
+        : "赶上首轮";
+    const resultText = fact.adverse_consequence === true
+      ? "首次有效行动前本方出现减员"
+      : fact.positive_consequence === true
+        ? "及时行动后形成有利交换"
+        : "未观察到确定的直接后果";
+    const tone = suppressedReasons.length
+      ? "suppressed"
+      : fact.negative_eligible === true || fact.initiation_negative_eligible === true
+        ? "negative"
+        : fact.positive_consequence === true ? "positive" : "neutral";
+    const region = fact.region ? regionName(fact.region) : fight?.location || "区域待确认";
+    return `<button class="player-score-combat-timing-row ${tone}" type="button" data-player-score-combat-timing-fight="${escapeHtml(fightId)}" data-player-score-time="${Number(fact.review_start ?? engageTime ?? 0)}">
+      <span class="player-score-combat-timing-identity"><time>${engageTime == null ? "--:--" : formatTime(engageTime)}</time><strong>${escapeHtml(fight?.title || region)}</strong><small>${escapeHtml(region)} · 置信度 ${Math.round(Number(fact.confidence || 0))}%</small></span>
+      <span><small>队伍接触</small><strong>${engageTime == null ? "--:--" : formatTime(engageTime)}</strong></span>
+      <span><small>你的到场</small><strong>${arrivalTime == null ? "--:--" : formatTime(arrivalTime)}</strong><em>${delta == null ? "空间到场待确认" : `晚于队伍 ${delta} 秒`}</em></span>
+      <span><small>首次行动</small><strong>${firstActionTime == null ? "--:--" : formatTime(firstActionTime)}</strong><em>首次可归属有效行动</em></span>
+      <span><small>首轮交战</small><strong>${rotationText}</strong><em>${firstRotationEnd == null ? "窗口待确认" : `窗口至 ${formatTime(firstRotationEnd)}`}</em></span>
+      <span class="player-score-combat-timing-feasibility ${feasibility.tone}"><small>到场条件</small><strong>${escapeHtml(feasibility.label)}</strong><em>${escapeHtml(suppressedReasons.join(" · ") || resultText)}</em></span>
+      <i data-lucide="arrow-up-right"></i>
+    </button>`;
+  }).join("") || `<div class="player-score-data-gap compact"><span>当前报告没有逐秒位置与首轮交战事实；不会用伤害事件代替空间到场。</span></div>`;
+  const timingCoverage = model.combatTiming?.coverage || {};
   return `<div class="player-score-combat-view">
     <section class="player-score-combat-summary"><span><small>有效参与片段</small><strong>${fights.length}</strong></span><span><small>团战 / 小规模</small><strong>${teamfights} / ${fights.length - teamfights}</strong></span><span><small>已归属英雄伤害</small><strong>${totalDamage.toLocaleString("zh-CN")}</strong></span><span><small>平均战场存在率</small><strong>${averagePresence == null ? "--" : `${averagePresence.toFixed(1)}%`}</strong></span><span><small>职责门禁通过</small><strong>${passedGates} / ${contributions.length}</strong></span><button class="text-command" type="button" data-player-score-jump="combat">打开战斗团战</button></section>
+    <section class="player-score-combat-timing"><header><span><small>空间到场、行动与首轮窗口</small><strong>战斗时机</strong></span><em>${timingFacts.length} 场 · 空间覆盖 ${Math.round(Number(timingCoverage.spatial_fact_pct || 0))}%</em></header><div>${timingRows}</div></section>
     <section class="player-score-combat-list"><header><span><small>战前 10 秒至收尾</small><strong>逐场职责审计</strong></span><em>点击查看硬门禁与个人贡献</em></header><div>${rows}</div></section>
   </div>`;
 }
@@ -5303,6 +6659,11 @@ function playerScoreEvidenceFact(label, value, tone = "") {
 
 function playerScoreRootCauseHtml(rootCause) {
   if (!rootCause) return "";
+  const scorePathMeta = {
+    embedded: { label: "已计入基础分", className: "embedded" },
+    modifier: { label: "行为修正", className: "modifier" },
+    context_only: { label: "仅作上下文", className: "context" },
+  };
   const consequenceMeta = {
     death: { label: "阵亡", icon: "skull" },
     item_delay: { label: "装备延误", icon: "hourglass" },
@@ -5325,28 +6686,50 @@ function playerScoreRootCauseHtml(rootCause) {
       <span><small>${escapeHtml(status)}${contextOnly}${consequence.time == null ? "" : ` · ${formatTime(consequence.time)}`}</small><strong>${escapeHtml(consequence.label || meta.label)}</strong><em>${escapeHtml(consequence.fact || "该后果已有结构化证据，但尚无文字摘要。")}</em></span>
     </div>`;
   }).join("");
-  const cap = rootCause.impact_cap || {};
-  const rawPenalty = playerScoreNumber(cap.raw_negative_overall);
-  const cappedPenalty = playerScoreNumber(cap.capped_negative_overall);
-  const limit = playerScoreNumber(cap.overall_penalty_cap) ?? 6;
-  const capApplied = cap.applied === true;
+  const cap = rootCause.scoring_summary || rootCause.impact_cap || {};
+  const rawPenalty = playerScoreNumber(
+    cap.candidate_negative_overall ?? cap.raw_negative_overall,
+  );
+  const cappedPenalty = playerScoreNumber(
+    cap.applied_negative_overall ?? cap.capped_negative_overall,
+  );
+  const limit = playerScoreNumber(cap.root_cap ?? cap.overall_penalty_cap) ?? 6;
+  const capApplied = cap.root_cap_applied === true || cap.applied === true;
   const capText = rawPenalty == null || cappedPenalty == null
     ? "当前根因没有可计入的负向评分影响"
     : capApplied
       ? `封顶前 -${rawPenalty.toFixed(2)} → 计入 -${cappedPenalty.toFixed(2)}`
-      : `归因影响 -${cappedPenalty.toFixed(2)} · 单因上限 -${limit.toFixed(2)}`;
+      : `实际应用 -${cappedPenalty.toFixed(2)} · 单因上限 -${limit.toFixed(2)}`;
   const dimensions = Object.entries(rootCause.dimension_impacts || {}).filter(([, value]) => Number(value) < 0)
     .map(([key, value]) => `<span>${escapeHtml(PLAYER_SCORE_DIMENSION_META[key]?.label || key)} <b>${signedValue(value)}</b></span>`).join("");
+  const scoringImpacts = (rootCause.scoring_impacts || []).map((impact) => {
+    const path = scorePathMeta[impact.score_path] || scorePathMeta.context_only;
+    const duplicate = impact.dedupe_status === "suppressed_duplicate";
+    const stateLabel = duplicate ? "同结果已去重" : path.label;
+    const raw = playerScoreNumber(impact.raw_delta) ?? 0;
+    const applied = playerScoreNumber(impact.applied_delta) ?? 0;
+    const confidenceFactor = Math.round((playerScoreNumber(impact.confidence_factor) ?? 0) * 100);
+    const responsibilityFactor = Math.round((playerScoreNumber(impact.responsibility_factor) ?? 0) * 100);
+    return `<article class="player-score-root-impact ${path.className} ${duplicate ? "deduped" : ""}">
+      <header><span>${escapeHtml(PLAYER_SCORE_DIMENSION_META[impact.dimension]?.label || impact.dimension || "上下文")}</span><b>${escapeHtml(stateLabel)}</b></header>
+      <div><span><small>原始影响</small><strong>${signedValue(raw)}</strong></span><span><small>置信系数</small><strong>${confidenceFactor}%</strong></span><span><small>归责系数</small><strong>${responsibilityFactor}%</strong></span><span><small>实际应用</small><strong>${signedValue(applied)}</strong></span></div>
+      <p>${escapeHtml(duplicate ? "相同结果已由更强证据根因计入，本项保留审计但不重复加减分。" : impact.overlap_reason || impact.suppression_reason || "独立行为上下文通过计分门槛。")}</p>
+    </article>`;
+  }).join("");
   return `<section class="player-score-root-cause">
     <header><span><small>同一根因，只扣一次</small><strong>后果链</strong></span><em>${Number(rootCause.consequence_count || 0)} 项</em></header>
     ${consequences ? `<div class="player-score-root-consequences">${consequences}</div>` : `<p>当前根因没有关联到额外后果。</p>`}
     <div class="player-score-root-cap ${capApplied ? "capped" : ""}"><span><small>跨维度归因</small><strong>${escapeHtml(capText)}</strong></span><i data-lucide="${capApplied ? "shield-check" : "shield"}"></i></div>
     ${dimensions ? `<div class="player-score-root-dimensions">${dimensions}</div>` : ""}
+    ${scoringImpacts ? `<div class="player-score-root-impacts">${scoringImpacts}</div>` : ""}
   </section>`;
 }
 
 function playerScoreSelectedEvidence(model) {
   const selected = state.selectedPlayerScoreEvidence;
+  if (selected?.type === "score-audit") {
+    return { type: "score-audit", item: model.scoreAudit };
+  }
   if (selected?.type === "brief-story") {
     const item = model.brief.stories.find((story) => String(story.id) === String(selected.id));
     if (item) return { type: "brief-story", item };
@@ -5372,6 +6755,10 @@ function playerScoreSelectedEvidence(model) {
         },
       };
     }
+  }
+  if (selected?.type === "root-score") {
+    const item = model.rootCauseById?.get(String(selected.id || ""));
+    if (item) return { type: "root-score", item };
   }
   if (selected?.type === "dimension") {
     const item = model.dimensions.find((dimension) => dimension.key === selected.id);
@@ -5405,10 +6792,10 @@ function playerScoreSelectedEvidence(model) {
     const item = playerScoreEventsForHero(model.hero).find((event) => String(event.scoreId) === String(selected.id));
     if (item) return { type: "timeline", item };
   }
-  const fallback = state.playerScoreMode === "brief"
+  const fallback = state.readingMode === "simple"
     ? model.brief.priorities[0] || model.brief.stories[0] || model.brief.strengths[0]
     : model.advice[0] || [...model.dimensions].filter((dimension) => dimension.score != null).sort((left, right) => left.score - right.score)[0] || model.dimensions[0];
-  const type = state.playerScoreMode === "brief"
+  const type = state.readingMode === "simple"
     ? model.brief.priorities.includes(fallback) || model.brief.strengths.includes(fallback) ? "brief-insight" : "brief-story"
     : fallback?.id && model.advice.includes(fallback) ? "advice" : "dimension";
   state.selectedPlayerScoreEvidence = fallback ? { type, id: fallback.id || fallback.key } : null;
@@ -5433,7 +6820,51 @@ function renderPlayerScoreEvidence(model) {
   let body = "";
   let module = "timeline";
   let time = null;
-  if (type === "brief-story") {
+  if (type === "score-audit") {
+    heading = "综合分审计";
+    module = "player-score";
+    status = playerScoreEvidenceLevel(item.valid ? "full" : "invalid");
+    const formatAuditScore = (value) => value == null ? "--" : Number(value).toFixed(2);
+    if (!item.supported) {
+      status = playerScoreEvidenceLevel("partial");
+      body = `<section class="player-score-data-gap compact"><i data-lucide="refresh-cw"></i><span><strong>旧版报告不支持可重算审计</strong><small>当前分数仍可查看；使用最新解析器重新解析后，才会生成基础分、行为修正、最终分和三路计分记录。</small></span></section>`;
+    } else {
+    const dimensionRows = item.rows.filter((row) => row.available).map((row) => {
+      const meta = PLAYER_SCORE_DIMENSION_META[row.key] || { label: row.key || "维度" };
+      const modifierTone = Number(row.storedModifier || 0) > 0
+        ? "positive"
+        : Number(row.storedModifier || 0) < 0 ? "negative" : "neutral";
+      return `<button class="player-score-audit-row ${row.valid ? "valid" : "invalid"}" type="button" data-player-score-evidence-type="dimension" data-player-score-evidence-id="${escapeHtml(row.key)}">
+        <span><strong>${escapeHtml(meta.label)}</strong><small>有效权重 ${Number(row.effectiveWeight || 0).toFixed(2)}%</small></span>
+        <span><small>基础分</small><b>${formatAuditScore(row.baseScore)}</b></span>
+        <span class="${modifierTone}"><small>行为修正</small><b>${signedValue(row.storedModifier || 0)}</b></span>
+        <span><small>最终分</small><b>${formatAuditScore(row.storedFinalScore)}</b></span>
+        <span><small>综合贡献</small><b>${formatAuditScore(row.finalContribution)}</b></span>
+        <i data-lucide="chevron-right"></i>
+      </button>`;
+    }).join("");
+    const pathCounts = item.pathCounts || {};
+    const auditIssueMeta = {
+      overall_base_mismatch: "基础综合分不一致",
+      overall_final_mismatch: "最终综合分不一致",
+      overall_modifier_mismatch: "综合修正不一致",
+      duplicate_applied_dedupe_key: "同一结果被重复应用",
+      no_available_dimensions: "没有可评分维度",
+      dimension_recomputation_failed: "至少一个维度不一致",
+    };
+    const issueText = item.valid
+      ? `本地重算一致 · 允许误差 ±${Number(item.tolerance || 0.05).toFixed(2)}`
+      : `本地重算不一致 · ${item.issues.map((issue) => auditIssueMeta[issue] || "未知审计差异").join("、") || "评分字段缺失"}`;
+    body = `<section class="player-score-evidence-score score-audit-summary">
+      <span><small>基础综合分</small><strong>${formatAuditScore(item.storedBaseScore)}</strong></span>
+      <span><small>行为修正</small><strong class="${Number(item.storedBehaviorModifier || 0) < 0 ? "negative" : Number(item.storedBehaviorModifier || 0) > 0 ? "positive" : ""}">${signedValue(item.storedBehaviorModifier || 0)}</strong></span>
+      <span><small>最终综合分</small><strong>${formatAuditScore(item.storedFinalScore)}</strong></span>
+    </section>
+    <section class="player-score-audit-verification ${item.valid ? "valid" : "invalid"}"><i data-lucide="${item.valid ? "badge-check" : "circle-alert"}"></i><span><small>本地重算</small><strong>${escapeHtml(issueText)}</strong><em>基础 ${formatAuditScore(item.recomputedBaseScore)} · 修正 ${signedValue(item.recomputedBehaviorModifier || 0)} · 最终 ${formatAuditScore(item.recomputedFinalScore)}</em></span></section>
+    <section><header>三路计分</header><div class="player-score-audit-paths"><span class="embedded"><small>已计入基础分</small><strong>${Number(pathCounts.embedded || 0)}</strong></span><span class="modifier"><small>行为修正</small><strong>${Number(pathCounts.modifier || 0)}</strong></span><span class="context"><small>仅作上下文</small><strong>${Number(pathCounts.context_only || 0)}</strong></span><span class="dedupe"><small>同结果已去重</small><strong>${Number(item.duplicateAppliedDedupeKeys?.length || 0)}</strong></span></div></section>
+    <section><header>维度贡献</header><div class="player-score-audit-table">${dimensionRows || `<div class="player-score-data-gap compact"><span>没有可进入综合分的维度</span></div>`}</div></section>`;
+    }
+  } else if (type === "brief-story") {
     const verdict = PLAYER_SCORE_BRIEF_VERDICT_META[item.verdict] || PLAYER_SCORE_BRIEF_VERDICT_META.missing;
     heading = item.title;
     module = item.module || "timeline";
@@ -5459,24 +6890,54 @@ function renderPlayerScoreEvidence(model) {
     const facts = item.evidence.length ? item.evidence.map((evidence) => playerScoreEvidenceFact(PLAYER_EVIDENCE_META[evidence.key]?.[0] || evidence.key || "指标", playerEvidenceText(evidence))).join("")
       : `${fallbackFacts.map(([label, value]) => playerScoreEvidenceFact(label, value, "fact")).join("")}${playerScoreEvidenceFact("评分状态", "事实可展示，但当前分析包没有足够门禁生成该维度分", "missing")}`;
     const missing = (item.missing || []).map((key) => `<span>${escapeHtml(PLAYER_SCORE_MISSING_META[key] || key)}</span>`).join("");
-    const behaviorComponents = item.behaviorComponents.filter((component) => component?.insight_id).map((component) => {
+    const auditPathMeta = {
+      embedded: { label: "已计入基础分", className: "embedded" },
+      modifier: { label: "行为修正", className: "modifier" },
+      context_only: { label: "仅作上下文", className: "context" },
+    };
+    const scoringSource = item.scoringComponents.length
+      ? item.scoringComponents
+      : item.behaviorComponents.filter((component) => component?.insight_id).map((component) => ({
+        ...component,
+        score_path: "modifier",
+        raw_delta: component.raw_impact ?? component.impact,
+        applied_delta: component.impact,
+      }));
+    const behaviorComponents = scoringSource.map((component) => {
       const insight = model.rawInsights.find((candidate) => String(candidate.id) === String(component.insight_id));
       const rootCause = model.rootCauseById?.get(String(component.root_cause_id || insight?.root_cause_id || ""));
-      const impact = playerScoreNumber(component.impact);
+      const impact = playerScoreNumber(component.applied_delta);
+      const rawImpact = playerScoreNumber(component.raw_delta ?? component.raw_impact ?? component.impact);
       const timeStart = playerScoreNumber(component.time_start ?? insight?.time_start ?? component.jump_target?.time);
-      const gateStatus = component.gate_status || insight?.gate_status || "passed";
-      const consequenceCount = Number(rootCause?.consequence_count || component.consequence_types?.length || 0);
-      const gateText = rootCause?.impact_cap?.applied
-        ? `同因 ${consequenceCount} 项后果 · 综合扣分已封顶`
-        : consequenceCount
-          ? `同因 ${consequenceCount} 项后果 · 只计一次`
-          : gateStatus === "passed" ? "已通过行为门禁" : `门禁 ${gateStatus}`;
-      return `<button class="player-score-behavior-component ${impact == null ? "neutral" : impact >= 0 ? "positive" : "negative"}" type="button" data-player-score-evidence-type="behavior-insight" data-player-score-evidence-id="${escapeHtml(component.insight_id)}" data-player-score-time="${timeStart ?? 0}">
-        <span><small>${timeStart == null ? "全场聚合" : formatTime(timeStart)}${component.location ? ` · ${escapeHtml(component.location)}` : ""}</small><strong>${escapeHtml(component.title || insight?.title || "行为证据")}</strong><em>${escapeHtml(gateText)}</em></span>
+      const path = auditPathMeta[component.score_path] || auditPathMeta.context_only;
+      const duplicate = component.dedupe_status === "suppressed_duplicate";
+      const pathLabel = duplicate ? "同结果已去重" : path.label;
+      const evidenceType = rootCause ? "root-score" : "behavior-insight";
+      const evidenceId = rootCause?.id || component.insight_id || "";
+      return `<button class="player-score-behavior-component ${path.className} ${impact == null ? "neutral" : impact >= 0 ? "positive" : "negative"}" type="button" data-player-score-evidence-type="${evidenceType}" data-player-score-evidence-id="${escapeHtml(evidenceId)}" data-player-score-time="${timeStart ?? 0}">
+        <span><small>${timeStart == null ? "全场聚合" : formatTime(timeStart)}${component.location ? ` · ${escapeHtml(component.location)}` : ""}</small><strong>${escapeHtml(component.title || insight?.title || "行为证据")}</strong><em>${escapeHtml(pathLabel)} · 原始 ${rawImpact == null ? "--" : signedValue(rawImpact)} · 实际应用 ${impact == null ? "--" : signedValue(impact)}</em></span>
         <b class="${impact != null && impact >= 0 ? "positive" : "negative"}">${impact == null ? "--" : signedValue(impact)}</b><i data-lucide="chevron-right"></i>
       </button>`;
     }).join("");
-    body = `<section class="player-score-evidence-score"><span><small>维度分</small><strong>${item.score == null ? "--" : Math.round(item.score)}</strong></span><span><small>位置权重</small><strong>${item.roleWeight}%</strong></span><span><small>置信度</small><strong>${item.confidence == null ? "--" : `${Math.round(item.confidence)}%`}</strong></span></section>${behaviorComponents ? `<section><header>行为加减分</header><div class="player-score-behavior-components">${behaviorComponents}</div></section>` : ""}<section><header>使用事实</header><div class="player-score-evidence-facts">${facts}</div></section>${missing ? `<section><header>缺失字段与门禁</header><div class="player-score-evidence-missing">${missing}</div></section>` : ""}<section><header>评分说明</header><p>${escapeHtml(item.score == null ? "缺失指标不会按 0 分处理，本维度从有效分母移除并降低报告置信度。" : `${item.brief}。当前分数来自 ${item.sourceKey || item.key}，不直接受比赛胜负影响。`)}</p>${item.scoreImpact == null ? "" : `<small>对综合分影响 ${signedValue(item.scoreImpact)}</small>`}</section>`;
+    const atomicAudit = renderPlayerScoreAtomicAudit({
+      components: item.baseComponents,
+      scoreAudit: item.scoreAudit,
+      reasonMeta: PLAYER_SCORE_MISSING_META,
+    });
+    body = `<section class="player-score-evidence-score dimension-score-chain"><span><small>基础分</small><strong>${item.baseScore == null ? "--" : Number(item.baseScore).toFixed(2)}</strong></span><span><small>行为修正</small><strong class="${Number(item.behaviorModifier || 0) < 0 ? "negative" : Number(item.behaviorModifier || 0) > 0 ? "positive" : ""}">${signedValue(item.behaviorModifier || 0)}</strong></span><span><small>最终分</small><strong>${item.finalScore == null ? "--" : Number(item.finalScore).toFixed(2)}</strong></span></section>
+    ${atomicAudit.baseHtml}
+    ${atomicAudit.chainHtml}
+    <section class="player-score-dimension-audit-meta"><small>位置权重 ${item.roleWeight}% · 有效权重 ${item.effectiveWeight == null ? "--" : `${Number(item.effectiveWeight).toFixed(2)}%`} · 置信度 ${item.confidence == null ? "--" : `${Math.round(item.confidence)}%`}</small></section>
+    ${atomicAudit.componentsHtml ? `<section><header>基础分组件</header><div class="player-score-base-components">${atomicAudit.componentsHtml}</div></section>` : ""}
+    ${behaviorComponents ? `<section><header>评分路径</header><div class="player-score-behavior-components">${behaviorComponents}</div></section>` : ""}
+    ${item.comparison ? `<section><header>比较对象</header><div class="player-score-comparison"><strong>${escapeHtml(item.comparison.label || "本场事实")}</strong><small>${escapeHtml(item.comparison.basis || item.comparison.type || "")}</small></div></section>` : ""}
+    <section><header>使用事实</header><div class="player-score-evidence-facts">${facts}</div></section>${missing ? `<section><header>缺失字段与门禁</header><div class="player-score-evidence-missing">${missing}</div></section>` : ""}<section><header>评分说明</header><p>${escapeHtml(item.score == null ? "缺失指标不会按 0 分处理，本维度从有效分母移除并降低报告置信度。" : `${item.brief}。最终分由基础分加上通过归责、去重和封顶的行为修正得到。`)}</p>${item.scoreImpact == null ? "" : `<small>对综合分贡献 ${signedValue(item.scoreImpact)}</small>`}</section>`;
+  } else if (type === "root-score") {
+    heading = item.title || "根因计分审计";
+    module = item.jump_target?.module || "timeline";
+    time = playerScoreNumber(item.time_start ?? item.jump_target?.time);
+    status = playerScoreEvidenceLevel(Number(item.confidence || 0) >= 85 ? "full" : "derived");
+    body = `${playerScoreRootCauseHtml(item)}<section><header>计分说明</header><p>同一根因先经过置信度与归责系数，再执行去重、单因封顶、维度封顶和综合封顶。页面显示的“实际应用”可以逐项重算最终分。</p></section>`;
   } else if (type === "advice") {
     heading = item.title;
     status = playerScoreEvidenceLevel(item.legacy || Number(item.confidence || 0) < 70 ? "partial" : Number(item.confidence || 0) >= 85 ? "full" : "derived");
@@ -5538,28 +6999,33 @@ function renderPlayerScoreEvidence(model) {
 function renderPlayerScoreContent(model) {
   const root = document.querySelector("#player-score-content");
   const section = state.playerScoreSection;
-  const mode = state.playerScoreMode === "deep" ? "deep" : "brief";
+  const mode = state.readingMode === "professional" ? "deep" : "brief";
   const panel = document.querySelector(".player-score-main-panel");
+  const workspace = document.querySelector(".player-score-workspace");
   const tabs = document.querySelector("#player-score-sections");
   panel?.classList.toggle("brief-mode", mode === "brief");
   panel?.classList.toggle("deep-mode", mode === "deep");
+  workspace?.classList.toggle("brief-reading", mode === "brief");
   tabs?.classList.toggle("hidden", mode !== "deep");
-  document.querySelectorAll("#player-score-modes [data-player-score-mode]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.playerScoreMode === mode);
-  });
-  const modeMeta = document.querySelector("#player-score-mode-meta span");
-  if (modeMeta) modeMeta.textContent = mode === "brief"
-    ? model.brief.source === "v3" ? "结构化结论与证据来自同一份 Replay" : "兼容旧报告，仅展示达到证据门槛的结论"
-    : `${model.dimensions.filter((dimension) => dimension.score != null).length}/10 个维度可评分 · 缺失指标不按 0 分`;
   document.querySelectorAll("#player-score-sections [data-player-score-section]").forEach((button) => {
     button.classList.toggle("active", button.dataset.playerScoreSection === section);
   });
-  const needsUpgrade = !model.hasReport || model.legacy || state.currentAnalysis?.upgrade_required;
-  const upgrade = needsUpgrade && section === "overview"
-    ? `<div class="player-score-upgrade-banner"><i data-lucide="scan-search"></i><span><strong>${model.hasReport ? "当前是旧版玩家报告" : "当前分析包没有玩家评分报告"}</strong><small>现有事实仍可查看；重新解析后生成按位置门禁的简报、证据与训练计划。</small></span>${state.currentMatch ? `<button class="command-button secondary" type="button" data-player-score-reparse><i data-lucide="rotate-cw"></i><span>升级分析</span></button>` : ""}</div>`
-    : "";
+  const reportLoadError = state.currentAnalysis?.module_load_errors?.players;
+  const showUpgrade = section === "overview"
+    || (section === "combat" && model.missingCombatTiming);
+  const upgradeTitle = model.missingCombatTiming
+    ? "当前报告尚无战斗时机分析"
+    : model.hasReport ? "当前是旧版玩家报告" : "当前分析包没有玩家评分报告";
+  const upgradeDetail = model.missingCombatTiming
+    ? "现有评分仍可查看；升级分析后生成空间到场、首次行动和首轮交战事实。"
+    : "现有事实仍可查看；重新解析后生成按位置门禁的简报、证据与训练计划。";
+  const upgrade = reportLoadError && section === "overview"
+    ? `<div class="player-score-upgrade-banner"><i data-lucide="circle-alert"></i><span><strong>玩家评分报告读取失败</strong><small>${escapeHtml(reportLoadError)}；其他已加载事实仍可查看。</small></span><button class="command-button secondary" type="button" data-player-score-retry><i data-lucide="refresh-cw"></i><span>重新读取</span></button></div>`
+    : model.needsUpgrade && showUpgrade
+      ? `<div class="player-score-upgrade-banner"><i data-lucide="scan-search"></i><span><strong>${upgradeTitle}</strong><small>${upgradeDetail}</small></span>${state.currentMatch ? `<button class="command-button secondary" type="button" data-player-score-reparse><i data-lucide="rotate-cw"></i><span>升级分析</span></button>` : ""}</div>`
+      : "";
   if (mode === "brief") {
-    root.innerHTML = `${upgrade}${renderPlayerScoreBrief(model)}`;
+    root.innerHTML = `${upgrade}${renderSimplePlayerReport(model)}`;
     installImageFallback(root, heroImage("unknown"));
     refreshIcons(root);
     return;
@@ -5579,8 +7045,36 @@ function renderPlayerScoreContent(model) {
   refreshIcons(root);
 }
 
+function playerScoreReportIsPending() {
+  const analysis = state.currentAnalysis;
+  return Boolean(
+    analysis
+    && !analysis.modules?.players
+    && !analysis.module_load_errors?.players
+    && analysisModuleAvailable(analysis, "players"),
+  );
+}
+
+function renderPlayerScoreLoading() {
+  const loading = `<div class="player-score-data-gap player-score-module-loading"><span class="is-spinning"><i data-lucide="loader-circle"></i></span><strong>正在读取玩家评分报告</strong><span>先加载本场十人的按位置评分，再补充战斗、路线与视野证据。</span></div>`;
+  document.querySelector("#player-score-header").innerHTML = loading;
+  renderPlayerScoreRoster();
+  document.querySelector("#player-score-content").innerHTML = loading;
+  document.querySelector("#player-score-evidence-title").textContent = "评分证据";
+  const stateTag = document.querySelector("#player-score-evidence-state");
+  stateTag.textContent = "加载中";
+  stateTag.className = "evidence-tag aggregate";
+  document.querySelector("#player-score-evidence-body").innerHTML = `<div class="player-score-data-gap compact"><span>玩家报告加载完成后可查看事实、判断与建议的对应关系。</span></div>`;
+  document.querySelector("#player-score-timeline").innerHTML = "";
+  refreshIcons(document.querySelector("#detail-player-score"));
+}
+
 function renderPlayerScore() {
   if (!document.querySelector("#detail-player-score")) return;
+  if (playerScoreReportIsPending()) {
+    renderPlayerScoreLoading();
+    return;
+  }
   const model = playerScoreModel();
   renderPlayerScoreHeader(model);
   renderPlayerScoreRoster();
@@ -5650,10 +7144,197 @@ function jumpFromPlayerScore(moduleName, time) {
   if (Number.isFinite(Number(time))) updateCurrentTime(Number(time), { syncSegment: false });
 }
 
+function renderPlayerReportReviewBar() {
+  const root = document.querySelector("#player-report-review-bar");
+  if (!root) return;
+  const review = state.playerReportReviewWindow;
+  document.querySelector("#page-detail")?.classList.toggle("has-player-report-review", Boolean(review));
+  root.hidden = !review;
+  if (!review) return;
+
+  const { navigation } = review;
+  const viewLabel = {
+    development: "发育复盘",
+    farm: "打钱分析",
+    vision: "视野分析",
+    build: "出装技能",
+    combat: "战斗团战",
+    timeline: "完整时间轴",
+  }[navigation.view] || "比赛复盘";
+  const location = navigation.mapFocus?.region
+    ? regionName(navigation.mapFocus.region)
+    : viewLabel;
+  root.classList.toggle("is-problem", review.kind === "improvement");
+  root.classList.toggle("is-context", review.kind === "context");
+  document.querySelector("#player-report-review-origin").textContent = review.kind === "strength"
+    ? "来自玩家报告 · 做得好"
+    : review.kind === "context"
+      ? "来自玩家报告 · 重要事实"
+      : "来自玩家报告 · 主要问题";
+  document.querySelector("#player-report-review-title").textContent = review.title || "复盘这一波";
+  document.querySelector("#player-report-review-range").textContent =
+    `${formatTime(navigation.rangeStart)}-${formatTime(navigation.rangeEnd)}`;
+  document.querySelector("#player-report-review-location").textContent = `${location} · ${viewLabel}`;
+  syncPlaybackControls();
+  refreshIcons(root);
+}
+
+function reviewPlayerScoreInsight(insightId, occurrenceIndex = null) {
+  const model = playerScoreModel();
+  const insight = [
+    ...(model.simpleReport?.timeline || []),
+    ...(model.brief?.strengths || []),
+    ...(model.brief?.priorities || []),
+    ...model.eventCandidates.map((candidate) => ({
+      id: candidate.id,
+      kind: candidate.kind || "context",
+      title: candidate.title || "可复核事实",
+      fact: candidate.fact || "",
+      action: candidate.action || "",
+      jumpTarget: normalizePlayerReportJumpTarget(candidate.jump_target),
+      occurrences: [],
+    })),
+  ].find((item, index, items) => (
+    items.findIndex((candidate) => String(candidate.id) === String(item.id)) === index
+    && String(item.id) === String(insightId)
+  ));
+  const normalizedIndex = occurrenceIndex == null ? null : Number(occurrenceIndex);
+  const occurrence = Number.isInteger(normalizedIndex)
+    ? insight?.occurrences?.[normalizedIndex] || null
+    : null;
+  const reviewTarget = occurrence?.jumpTarget || insight?.jumpTarget;
+  if (!reviewTarget?.reviewable) {
+    showToast("这一条暂时不能定位", "需要重新解析以生成具体事件、复盘范围和地图位置", "circle-alert");
+    return;
+  }
+
+  const navigation = resolvePlayerReportReviewNavigation(reviewTarget);
+  const reportScrollTop = Number(
+    document.querySelector("#player-score-content")?.scrollTop
+    ?? document.querySelector(".detail-workspace")?.scrollTop
+    ?? 0,
+  );
+  state.selectedPlayerScoreEvidence = { type: "brief-insight", id: insight.id };
+  state.playerReportReviewWindow = {
+    insightId: insight.id,
+    occurrenceIndex: occurrence ? normalizedIndex : null,
+    occurrenceId: occurrence?.id || null,
+    kind: insight.kind,
+    title: simplifyPlayerReportText(
+      occurrence?.label ? `${insight.title} · ${occurrence.label}` : insight.title,
+    ),
+    fact: simplifyPlayerReportText(insight.fact),
+    action: simplifyPlayerReportText(insight.action),
+    playerSlot: state.selectedHeroSlot,
+    navigation,
+    returnContext: {
+      ...navigation.returnContext,
+      view: "player-score",
+      readingMode: state.readingMode,
+      playerScoreSection: state.playerScoreSection,
+      playerSlot: state.selectedHeroSlot,
+      selectedEvidence: { type: "brief-insight", id: insight.id },
+      scrollTop: reportScrollTop,
+    },
+  };
+
+  if (navigation.selectedStateKey && navigation.selectedId) {
+    state[navigation.selectedStateKey] = navigation.selectedId;
+  }
+  if (navigation.view === "combat") {
+    state.combatFilter = "all";
+    state.selectedCombatPlayerSlot = state.selectedHeroSlot;
+  }
+  if (navigation.view === "farm") {
+    state.farmTimeWindow = Number(navigation.rangeStart) >= 1200 ? "post20" : "pre20";
+  }
+  if (navigation.view === "vision") {
+    state.wardFilters = { team: "all", player: "all", type: "all", purpose: "all" };
+  }
+  if (navigation.developmentSideView) {
+    setDevelopmentSideView(navigation.developmentSideView);
+  }
+
+  setPlayerScoreEvidenceOpen(false);
+  setDetailView(navigation.view);
+  updateCurrentTime(navigation.seekTime, { syncSegment: false });
+  renderPlayerReportReviewBar();
+  window.requestAnimationFrame(() => {
+    if (navigation.view === "combat") {
+      renderCombat({ centerSelection: true, scrollBehavior: "smooth" });
+    }
+    if (navigation.view === "farm") {
+      document.querySelector(
+        `[data-farm-diagnostic-id="${CSS.escape(String(navigation.selectedId || ""))}"]`,
+      )?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+    if (navigation.view === "vision") {
+      const ward = WARD_RECORDS.find((item) => String(item.id) === String(navigation.selectedId));
+      focusWardOnMap(ward);
+    }
+    if (navigation.view === "build") {
+      const event = ITEM_EVENTS.find((item) => (
+        purchaseEventId(item, state.selectedHeroSlot) === String(navigation.selectedId)
+      ));
+      const node = document.querySelector(
+        `[data-build-event-id="${CSS.escape(String(navigation.selectedId || ""))}"]`,
+      );
+      node?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+      if (event) updatePlayheadMs(event.timeMs ?? event.time * 1000, { syncSegment: false });
+    }
+    if (navigation.view === "map") {
+      renderMapMarkers();
+      document.querySelector(
+        `[data-map-event-id="${CSS.escape(String(navigation.selectedId || ""))}"]`,
+      )?.focus({ preventScroll: true });
+    }
+  });
+}
+
+function returnToPlayerScoreReport() {
+  const review = state.playerReportReviewWindow;
+  if (!review) return;
+  const context = review.returnContext || {};
+  if (state.isPlaying) stopPlaybackAt(state.playheadMs);
+  if (Number.isFinite(Number(context.playerSlot))
+      && Number(context.playerSlot) !== Number(state.selectedHeroSlot)) {
+    selectHero(Number(context.playerSlot));
+  }
+  readingModeController.restoreFromReviewContext(context, { render: false });
+  state.playerScoreSection = context.playerScoreSection || "overview";
+  state.selectedPlayerScoreEvidence = context.selectedEvidence || {
+    type: "brief-insight",
+    id: review.insightId,
+  };
+  state.playerReportReviewWindow = null;
+  setDetailView("player-score");
+  renderPlayerReportReviewBar();
+  window.requestAnimationFrame(() => {
+    const scrollTop = Number(context.scrollTop || 0);
+    const reportContent = document.querySelector("#player-score-content");
+    if (reportContent) reportContent.scrollTop = scrollTop;
+    const workspace = document.querySelector(".detail-workspace");
+    if (workspace) workspace.scrollTop = scrollTop;
+  });
+}
+
+function togglePlayerReportReviewPlayback() {
+  const review = state.playerReportReviewWindow;
+  if (!review) return;
+  if (state.isPlaying) {
+    togglePlayback();
+    return;
+  }
+  updateCurrentTime(review.navigation.rangeStart, { syncSegment: false });
+  togglePlayback();
+}
+
 function renderCoverage() {
   const analysis = state.currentAnalysis;
   if (!analysis) {
     document.querySelector("#coverage-table").innerHTML = `<div class="coverage-empty"><i data-lucide="database-zap"></i><span>完成本地 Replay 解析后显示真实覆盖率</span></div>`;
+    document.querySelector("#coverage-impact-summary").textContent = "等待模块证据";
+    document.querySelector("#coverage-impact-list").innerHTML = `<div class="coverage-impact-empty">解析完成后说明哪些结论可确认、哪些结论已受控关闭。</div>`;
     refreshIcons(document.querySelector("#coverage-table"));
     return;
   }
@@ -5678,11 +7359,37 @@ function renderCoverage() {
     };
   });
   document.querySelector("#coverage-table").innerHTML = rows.map((row) => `<div class="coverage-row"><strong>${escapeHtml(row.label)}</strong><span>${Number(row.records || 0).toLocaleString("zh-CN")}</span><span>${escapeHtml(row.range || "--")}</span><span>${escapeHtml(row.precision || "--")}</span><span>${escapeHtml(row.source || "--")}</span><span class="data-status ${row.statusClass}">${row.statusLabel}</span></div>`).join("");
+  const evidenceByModule = analysis.modules?.module_evidence || {};
+  const moduleImpactRows = Object.entries(evidenceByModule)
+    .map(([key, evidence]) => coverageImpactFor(key, evidence))
+    .filter((impact) => impact.status !== "available" || impact.missing.length > 0);
+  const patchImpact = patchCoverageImpact(analysis.match);
+  const impactRows = patchImpact ? [...moduleImpactRows, patchImpact] : moduleImpactRows;
+  document.querySelector("#coverage-impact-summary").textContent = impactRows.length
+    ? `${impactRows.length} 个模块有受控缺口`
+    : "所有模块达到当前门槛";
+  document.querySelector("#coverage-impact-list").innerHTML = impactRows.length
+    ? impactRows.map((impact) => `
+      <article class="coverage-impact-card ${escapeHtml(impact.status)}">
+        <header><strong>${escapeHtml(impact.label)}</strong><span>${impact.confidence ? `${Math.round(impact.confidence)}% · ` : ""}${impact.missing.length} 项缺口</span></header>
+        <p><b>可确认：</b>${escapeHtml(impact.reliable)}</p>
+        <p><b>受影响：</b>${escapeHtml(impact.limited)}</p>
+        <p><b>已抑制：</b>${escapeHtml(impact.suppressed)}</p>
+      </article>
+    `).join("")
+    : `<div class="coverage-impact-empty">当前模块均达到最低证据门槛，没有额外关闭的分析结论。</div>`;
   const integrityStatus = analysis.integrity?.status;
   document.querySelector("#coverage-complete-label").textContent = integrityStatus === "partial"
-    ? "Replay 完整 · 坐标有缺口" : analysis.complete ? "完整 Replay" : "数据不完整";
+    ? "Replay 可用 · 部分结论受限" : analysis.complete ? "完整 Replay" : "数据不完整";
+  const coverageLed = document.querySelector(".coverage-score .status-led");
+  coverageLed?.classList.toggle("available", integrityStatus !== "partial" && analysis.complete);
+  coverageLed?.classList.toggle("checking", integrityStatus === "partial");
+  coverageLed?.classList.toggle("unavailable", !analysis.complete);
   document.querySelector("#coverage-object-count").textContent = `${Number(analysis.valid_json_objects || 0).toLocaleString("zh-CN")} 条有效事件 · 错误 ${analysis.invalid_lines || 0}`;
-  document.querySelector("#coverage-patch").textContent = analysis.match?.patch_name || (analysis.match?.patch ? `Patch ID ${analysis.match.patch}` : "--");
+  document.querySelector("#coverage-patch").textContent = patchResolutionLabel(
+    analysis.match?.patch_resolution,
+    analysis.match?.patch_name || (analysis.match?.patch ? `Patch ID ${analysis.match.patch}` : ""),
+  );
   document.querySelector("#coverage-schema").textContent = analysis.schema || "dota-lens/1.0";
   document.querySelector("#coverage-generated-at").textContent = formatGeneratedAt(analysis.generated_at);
 }
@@ -5723,8 +7430,39 @@ function renderTasks() {
     const retryDetail = job.stage === "waiting_replay_file" && job.retry_attempt
       ? ` · 第 ${Number(job.retry_attempt)} 次重试${job.http_status ? ` · HTTP ${job.http_status}` : ""}` : "";
     const liveDetail = stageDetail;
-    const friendlyMessage = job.status === "failed" ? TASK_ERROR_MESSAGES[job.error_code] || liveDetail : liveDetail;
-    const errorDetail = job.status === "failed" ? `<div class="task-error-message"><i data-lucide="circle-alert"></i><span><strong>${escapeHtml(job.error_code || "parse_failed")}</strong>${escapeHtml(friendlyMessage)}</span></div>` : "";
+    const failure = job.status === "failed" ? parseFailureGuidance(job) : null;
+    const failedStage = job.failed_stage || job.stage || "unknown";
+    const failedStageLabel = TASK_STAGE_META[failedStage]?.[0] || "未知阶段";
+    const retryableLabel = job.retryable === true ? "可以重试"
+      : job.retryable === false ? "不建议直接重试" : "等待确认";
+    const phaseDurations = job.phase_durations_ms && typeof job.phase_durations_ms === "object"
+      ? Object.entries(job.phase_durations_ms)
+        .map(([phase, duration]) => `${TASK_STAGE_META[phase]?.[0] || phase} ${Math.max(0, Math.round(Number(duration) || 0))}ms`)
+        .join(" · ")
+      : "";
+    const errorDetail = failure ? `
+      <section class="task-failure-detail" aria-label="解析失败说明">
+        <header class="task-failure-header">
+          <span><i data-lucide="circle-alert"></i></span>
+          <div><strong>${escapeHtml(failure.title)}</strong><p>${escapeHtml(failure.detail)}</p></div>
+        </header>
+        <div class="task-failure-next">
+          <strong>建议这样处理</strong>
+          <ol>${failure.suggestions.map((suggestion) => `<li>${escapeHtml(suggestion)}</li>`).join("")}</ol>
+        </div>
+        <details class="task-technical-details">
+          <summary>查看报错技术信息</summary>
+          <dl>
+            <div><dt>错误代码</dt><dd>${escapeHtml(job.error_code || "parse_failed")}</dd></div>
+            <div><dt>失败阶段</dt><dd>${escapeHtml(failedStageLabel)} · ${escapeHtml(failedStage)}</dd></div>
+            <div><dt>任务进度</dt><dd>${Math.max(0, Math.min(100, Math.round(Number(job.progress) || 0)))}%</dd></div>
+            <div><dt>重试判断</dt><dd>${escapeHtml(retryableLabel)}</dd></div>
+            ${job.http_status ? `<div><dt>HTTP 状态</dt><dd>${escapeHtml(job.http_status)}</dd></div>` : ""}
+            ${phaseDurations ? `<div><dt>阶段耗时</dt><dd>${escapeHtml(phaseDurations)}</dd></div>` : ""}
+            <div class="task-technical-message"><dt>原始错误</dt><dd>${escapeHtml(job.message || "未提供")}</dd></div>
+          </dl>
+        </details>
+      </section>` : "";
     const updatedAt = Date.parse(job.updated_at || job.created_at || "");
     const stalledSeconds = Number.isFinite(updatedAt) ? Math.max(0, Math.floor((Date.now() - updatedAt) / 1000)) : 0;
     const stalled = active && stalledSeconds >= 90;
@@ -5740,7 +7478,7 @@ function renderTasks() {
       ${errorDetail}
       ${stalledDetail}
       <div class="task-resource-grid"><span><small>任务阶段</small><strong>${stageLabel}</strong></span><span><small>已处理</small><strong>${transferred}</strong></span><span><small>总大小</small><strong>${total}</strong></span><span><small>有效事件</small><strong>${eventCount}</strong></span></div>
-      <div class="task-actions"><button class="command-button secondary" type="button" data-task-action="matches"><i data-lucide="arrow-left"></i><span>返回比赛</span></button>${active ? `<button class="command-button danger" type="button" data-task-action="cancel" data-job-id="${job.id}"><i data-lucide="square"></i><span>取消解析</span></button>` : ""}${["failed", "canceled"].includes(job.status) ? `<button class="command-button" type="button" data-task-action="retry" data-match-id="${job.match_id}"><i data-lucide="rotate-cw"></i><span>重新解析</span></button>` : ""}${job.status === "completed" ? `<button class="command-button" type="button" data-task-action="open" data-match-id="${job.match_id}"><i data-lucide="arrow-up-right"></i><span>打开报告</span></button>` : ""}</div>
+      <div class="task-actions"><button class="command-button secondary" type="button" data-task-action="matches"><i data-lucide="arrow-left"></i><span>返回比赛</span></button>${active ? `<button class="command-button danger" type="button" data-task-action="cancel" data-job-id="${job.id}"><i data-lucide="square"></i><span>取消解析</span></button>` : ""}${job.status === "failed" ? `<button class="command-button secondary" type="button" data-task-action="copy-error" data-job-id="${job.id}"><i data-lucide="clipboard-check"></i><span>复制反馈</span></button>` : ""}${["failed", "canceled"].includes(job.status) ? `<button class="command-button" type="button" data-task-action="retry" data-match-id="${job.match_id}"><i data-lucide="rotate-cw"></i><span>重新解析</span></button>` : ""}${job.status === "completed" ? `<button class="command-button" type="button" data-task-action="open" data-match-id="${job.match_id}"><i data-lucide="arrow-up-right"></i><span>打开报告</span></button>` : ""}</div>
     `;
   }
 
@@ -5751,7 +7489,7 @@ function renderTasks() {
     const failed = task.status === "failed";
     const canceled = task.status === "canceled";
     const label = completed ? "完成" : failed ? "失败" : canceled ? "已取消" : "处理中";
-    const detail = failed ? TASK_ERROR_MESSAGES[task.error_code] || "解析失败"
+    const detail = failed ? taskErrorMessage(task)
       : completed ? "本地 Replay 分析已完成" : canceled ? "任务已由用户取消" : "本地解析任务";
     return `<button class="task-row" type="button" data-history-job-id="${task.id}"><span class="task-state-icon ${failed ? "negative" : completed ? "positive" : "warning"}"><i data-lucide="${failed ? "circle-alert" : completed ? "circle-check" : canceled ? "circle-stop" : "clock-3"}"></i></span><span><strong>比赛 ${task.match_id}</strong><small>${escapeHtml(detail)}</small></span><time>${formatGeneratedAt(task.updated_at)}</time><span class="task-size">${task.result?.event_count ? `${Number(task.result.event_count).toLocaleString("zh-CN")} 条` : formatBytes(task.bytes_processed)}</span><span class="data-status ${completed ? "full" : failed ? "failed" : canceled ? "canceled" : "processing"}">${label}</span></button>`;
   }).join("") : `<div class="task-history-empty">已完成、失败或取消的任务会保留在这里</div>`;
@@ -5765,13 +7503,13 @@ function updatePlayheadMs(value, options = {}) {
   state.currentTime = state.playheadMs / 1000;
   document.querySelector("#global-time-slider").value = String(state.playheadMs);
   document.querySelector("#current-time-label").textContent = formatPreciseTimeMs(state.playheadMs);
-  updateMap();
-  updateChartCursor();
-  renderBuild();
-  syncWardTime();
-  syncFarmTime();
-  syncCombatPhasePlayhead();
-  syncPlayerScoreTime();
+  if (["development", "map"].includes(state.detailView)) updateMap();
+  if (state.detailView === "development") updateChartCursor();
+  if (state.detailView === "build") renderBuild();
+  if (state.detailView === "vision") syncWardTime();
+  if (state.detailView === "farm") syncFarmTime();
+  if (state.detailView === "combat") syncCombatPhasePlayhead();
+  if (state.detailView === "player-score") syncPlayerScoreTime();
 
   const currentSegment = SEGMENTS.find((segment) => state.currentTime >= segment.start && state.currentTime <= segment.end);
   if (currentSegment && options.syncSegment !== false) {
@@ -5833,8 +7571,8 @@ function renderDetailView(view) {
     }
     renderCombat();
   });
-  if (view === "timeline") window.requestAnimationFrame(filterTimelineEvents);
   if (view === "player-score") window.requestAnimationFrame(renderPlayerScore);
+  if (view === "players") window.requestAnimationFrame(renderScoreboard);
 }
 
 async function ensureAnalysisModulesForView(view) {
@@ -5849,13 +7587,34 @@ async function ensureAnalysisModulesForView(view) {
   button?.classList.add("module-loading");
   button?.setAttribute("aria-busy", "true");
   try {
-    const changed = await fetchAnalysisModules(analysis, matchId, missing);
-    if (!changed || state.currentAnalysis !== analysis) return;
-    hydrateAnalysisModules(analysis);
-    renderTimelineMarkers();
-    renderMapMarkers();
-    renderWardFilterOptions();
-    if (state.detailView === view) renderDetailView(view);
+    const batches = view === "player-score" && missing.includes("players")
+      ? [["players"], missing.filter((name) => name !== "players")].filter((batch) => batch.length)
+      : [missing];
+    const failures = [];
+    for (const batch of batches) {
+      const result = await fetchAnalysisModules(analysis, matchId, batch);
+      failures.push(...result.failures);
+      if (!result.changed || state.currentAnalysis !== analysis) continue;
+      hydrateAnalysisModules(analysis);
+      if (result.loaded.some((name) => ["snapshots", "development", "laning", "players"].includes(name))) {
+        renderHeroStrip();
+        renderLaneReview();
+        renderSegments();
+      }
+      renderTimelineMarkers();
+      renderMapMarkers();
+      renderWardFilterOptions();
+      if (state.detailView === view) renderDetailView(view);
+    }
+    if (failures.length) {
+      const names = failures.map((failure) => failure.name).join("、");
+      showToast(
+        failures.length === missing.length ? "分析模块读取失败" : "部分证据模块读取失败",
+        `${names}；可在当前页面重试`,
+        "circle-alert",
+      );
+      if (state.detailView === view) renderDetailView(view);
+    }
   } catch (error) {
     showToast("分析模块读取失败", error.message || "请检查本地解析器", "circle-alert");
   } finally {
@@ -5865,9 +7624,11 @@ async function ensureAnalysisModulesForView(view) {
 }
 
 function setDetailView(view) {
-  if (state.currentAnalysis && !REAL_ANALYSIS_VIEWS.has(view)) {
-    showToast("该模块尚未接入真实标准化数据", "当前已开放玩家对比和数据覆盖，原始 JSONL 已保存在本地", "construction");
-    view = "coverage";
+  if (!REAL_ANALYSIS_VIEWS.has(view)) {
+    if (state.currentAnalysis) {
+      showToast("该模块尚未接入真实标准化数据", "当前已开放玩家对比，原始 JSONL 已保存在本地", "construction");
+    }
+    view = "player-score";
   }
   state.detailView = view;
   document.querySelectorAll("[data-detail-view]").forEach((button) => button.classList.toggle("active", button.dataset.detailView === view));
@@ -5878,6 +7639,7 @@ function setDetailView(view) {
   renderDetailView(view);
   void ensureAnalysisModulesForView(view);
   syncTopbarActions();
+  renderPlayerReportReviewBar();
   refreshIcons();
 }
 
@@ -5895,10 +7657,13 @@ function setPage(page) {
   document.querySelector("#back-to-matches").classList.toggle("hidden", !detailMode);
 
   const titles = {
-    matches: ["比赛", state.matchesStatus === "ready" ? `账号 ${state.accountId} · OpenDota 最近比赛` : "等待连接账号"],
+    matches: ["比赛", state.matchesStatus === "ready"
+      ? `账号 ${state.accountId} · ${state.matchesOffline ? "离线缓存" : "OpenDota 最近比赛"}`
+      : "等待连接账号"],
     replays: ["Replay 库", "本地回放与分析包"],
     tasks: ["解析任务", "单任务队列"],
     settings: ["设置", "本地应用配置"],
+    help: ["使用说明", "三分钟上手 Dota Lens"],
   };
   if (detailMode) {
     const hero = HEROES[state.selectedHeroSlot];
@@ -5915,6 +7680,19 @@ function setPage(page) {
   refreshIcons();
 }
 
+function openHelpImageDialog(button) {
+  const dialog = document.querySelector("#help-image-dialog");
+  const image = document.querySelector("#help-image-dialog-preview");
+  const title = document.querySelector("#help-image-dialog-title");
+  const source = button?.dataset.helpImage;
+  if (!dialog || !image || !title || !source) return;
+  const label = button.dataset.helpTitle || "操作示例";
+  image.src = source;
+  image.alt = button.querySelector("img")?.alt || label;
+  title.textContent = label;
+  if (!dialog.open) dialog.showModal();
+}
+
 function setSettingsPanel(panelName) {
   const button = document.querySelector(`[data-settings-panel="${panelName}"]`);
   const panel = document.querySelector(`[data-settings-content="${panelName}"]`);
@@ -5922,6 +7700,270 @@ function setSettingsPanel(panelName) {
   state.settingsPanel = panelName;
   document.querySelectorAll("[data-settings-panel]").forEach((item) => item.classList.toggle("active", item === button));
   document.querySelectorAll("[data-settings-content]").forEach((item) => item.classList.toggle("active", item === panel));
+  if (panelName === "diagnostics") renderDiagnostics();
+  if (panelName === "updates") renderUpdateCenter();
+}
+
+function updateDistributionLabel(distribution) {
+  return ({
+    nsis: "Windows 安装版",
+    portable: "Windows 便携版",
+    development: "开发预览",
+  })[distribution] || "当前客户端";
+}
+
+function renderUpdateCenter() {
+  const root = document.querySelector("#settings-updates");
+  if (!root) return;
+  const viewModel = createUpdateViewModel(state.updateState);
+  const statusBand = document.querySelector("#update-status-band");
+  statusBand.className = `update-status-band ${viewModel.tone}`;
+  document.querySelector("#update-state-icon").innerHTML = `<i data-lucide="${viewModel.icon}"></i>`;
+  document.querySelector("#update-state-title").textContent = viewModel.title;
+  document.querySelector("#update-state-detail").textContent = viewModel.detail;
+  document.querySelector("#update-current-version").textContent = viewModel.currentVersion;
+  document.querySelector("#update-latest-version").textContent = viewModel.latestVersion || "--";
+  document.querySelector("#update-distribution").textContent = updateDistributionLabel(viewModel.distribution);
+
+  const release = document.querySelector("#update-release");
+  const releaseVisible = Boolean(viewModel.latestVersion)
+    && ["available", "downloading", "downloaded", "waiting_for_parser", "installing"].includes(viewModel.status);
+  release.classList.toggle("hidden", !releaseVisible);
+  document.querySelector("#update-release-name").textContent = viewModel.releaseName || `Dota Lens ${viewModel.latestVersion || ""}`;
+  document.querySelector("#update-release-notes").textContent = viewModel.releaseNotes;
+
+  const progress = document.querySelector("#update-progress");
+  progress.classList.toggle("hidden", !viewModel.progress.visible);
+  document.querySelector("#update-progress-label").textContent = `正在下载 ${viewModel.progress.value.toFixed(1)}%`;
+  document.querySelector("#update-progress-value").style.width = `${viewModel.progress.value}%`;
+  document.querySelector("#update-progress-speed").textContent = viewModel.progress.bytesPerSecond > 0
+    ? `${formatBytes(viewModel.progress.bytesPerSecond)}/s`
+    : "--";
+
+  const check = document.querySelector("#update-check");
+  const download = document.querySelector("#update-download");
+  const install = document.querySelector("#update-install");
+  check.classList.toggle("hidden", !viewModel.actions.check.visible);
+  check.disabled = viewModel.actions.check.disabled;
+  check.querySelector("span").textContent = viewModel.status === "checking" ? "正在检查" : "检查更新";
+  check.classList.toggle("is-spinning", viewModel.status === "checking");
+  download.classList.toggle("hidden", !viewModel.actions.download.visible);
+  download.disabled = viewModel.actions.download.disabled;
+  download.querySelector("span").textContent = viewModel.status === "downloading" ? "正在下载" : "下载更新";
+  install.classList.toggle("hidden", !viewModel.actions.install.visible);
+  install.disabled = viewModel.actions.install.disabled;
+  install.querySelector("span").textContent = viewModel.status === "waiting_for_parser"
+    ? "再次检查并安装"
+    : "重启并安装";
+  refreshIcons(root);
+}
+
+function applyUpdateState(nextState) {
+  if (!nextState || typeof nextState !== "object") return;
+  state.updateState = {
+    ...state.updateState,
+    ...nextState,
+    currentVersion: nextState.currentVersion || state.updateState.currentVersion || APP_VERSION,
+  };
+  renderUpdateCenter();
+}
+
+function pause(milliseconds) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+async function simulatePreviewUpdateAction(action) {
+  if (action === "check") {
+    applyUpdateState({ ...createPreviewUpdateState("checking", APP_VERSION), status: "checking" });
+    await pause(500);
+    applyUpdateState(createPreviewUpdateState("available", APP_VERSION));
+    return;
+  }
+  if (action === "download") {
+    const base = createPreviewUpdateState("available", APP_VERSION);
+    for (const value of [8, 19, 34, 52, 71, 86, 100]) {
+      applyUpdateState({
+        ...base,
+        status: "downloading",
+        progress: value,
+        bytesPerSecond: 1572864 + value * 4096,
+        transferred: Math.round(199229440 * value / 100),
+        total: 199229440,
+      });
+      await pause(110);
+    }
+    applyUpdateState({ ...base, status: "downloaded", progress: 100 });
+    showToast("更新下载完成", "现在可以重启并安装", "circle-check");
+    return;
+  }
+  if (action === "install") {
+    const latestVersion = state.updateState.latestVersion || "0.5.1";
+    applyUpdateState({ ...state.updateState, status: "installing" });
+    await pause(700);
+    applyUpdateState({
+      ...state.updateState,
+      status: "up_to_date",
+      currentVersion: latestVersion,
+      latestVersion,
+      progress: null,
+    });
+    showToast("模拟安装完成", `Dota Lens ${latestVersion} 已准备就绪`, "package-open");
+  }
+}
+
+async function runUpdateAction(action) {
+  if (PREVIEW_UPDATE_STATE) {
+    await simulatePreviewUpdateAction(action);
+    return;
+  }
+  const desktop = window.dotaLensDesktop;
+  const method = {
+    check: "checkForUpdates",
+    download: "downloadUpdate",
+    install: "installUpdate",
+  }[action];
+  if (!desktop || typeof desktop[method] !== "function") {
+    showToast("桌面更新不可用", "请在 Dota Lens 安装版中使用在线更新", "monitor-x");
+    return;
+  }
+  try {
+    const result = await desktop[method]();
+    if (result?.reason === "parser_busy") {
+      showToast("Replay 仍在解析", "解析完成或取消任务后，再点击安装", "hourglass");
+    } else if (result?.reason === "portable") {
+      showToast("便携版暂不自动安装", "请下载新版便携包后手动替换", "file-archive");
+    } else if (result?.ok === false && result.reason !== "busy") {
+      showToast("更新操作未完成", "可以稍后重新检查", "circle-alert");
+    }
+  } catch (error) {
+    showToast("更新操作失败", error?.message || "请稍后重试", "circle-alert");
+  }
+}
+
+async function setupUpdateCenter() {
+  if (PREVIEW_UPDATE_STATE) {
+    applyUpdateState(createPreviewUpdateState(PREVIEW_UPDATE_STATE, APP_VERSION));
+    return;
+  }
+  const desktop = window.dotaLensDesktop;
+  if (!desktop?.getUpdateState) {
+    applyUpdateState(createPreviewUpdateState("development", APP_VERSION));
+    return;
+  }
+  desktop.onUpdateState?.((nextState) => applyUpdateState(nextState));
+  try {
+    applyUpdateState(await desktop.getUpdateState());
+  } catch (error) {
+    applyUpdateState({
+      status: "error",
+      currentVersion: APP_VERSION,
+      distribution: "nsis",
+      errorMessage: error?.message || "无法读取更新状态。",
+    });
+  }
+}
+
+function maskDiagnosticPath(value) {
+  return String(value || "").replace(/^[A-Za-z]:\\Users\\[^\\]+/i, "%USERPROFILE%");
+}
+
+function diagnosticRows() {
+  const status = state.parserStatus;
+  const directories = readDirectorySettings();
+  return [
+    {
+      ok: Boolean(status),
+      title: status ? `Parser API ${status.version}` : "Parser API 未连接",
+      detail: status ? `PID ${status.pid} · 活跃任务 ${status.active_jobs}` : "检查本地端口 5600",
+    },
+    {
+      ok: Boolean(status?.java_version),
+      title: status?.java_version ? `Java ${status.java_version}` : "Java 运行时等待 Parser 报告",
+      detail: status?.max_memory_mb ? `最大堆内存 ${status.max_memory_mb} MB` : "未读取到内存上限",
+    },
+    {
+      ok: Boolean(status?.parser),
+      title: status?.parser || "Replay Parser 未知",
+      detail: status?.started_at ? `启动于 ${formatGeneratedAt(status.started_at)}` : "等待本地服务",
+    },
+    {
+      ok: Boolean(directories.replay),
+      title: directories.replay ? "Replay 目录已配置" : "Replay 目录未配置",
+      detail: directories.replay ? maskDiagnosticPath(directories.replay) : "可在 Dota 与 Replay 中选择",
+    },
+    {
+      ok: Boolean(status?.data_directory),
+      title: status?.data_directory ? "分析数据目录可用" : "分析数据目录等待 Parser 报告",
+      detail: status?.data_directory ? maskDiagnosticPath(status.data_directory) : "未读取到本地数据目录",
+    },
+  ];
+}
+
+function renderDiagnostics() {
+  const root = document.querySelector("#settings-diagnostics-list");
+  if (!root) return;
+  const memory = document.querySelector("#settings-parser-memory");
+  if (memory) {
+    memory.value = state.parserStatus?.max_memory_mb
+      ? `${state.parserStatus.max_memory_mb} MB（运行中）`
+      : "等待 Parser 状态";
+  }
+  root.innerHTML = diagnosticRows().map((row) => `
+    <span class="${row.ok ? "available" : "unavailable"}">
+      <i data-lucide="${row.ok ? "circle-check" : "circle-alert"}"></i>
+      <strong>${escapeHtml(row.title)}</strong>
+      <small>${escapeHtml(row.detail)}</small>
+    </span>
+  `).join("");
+  refreshIcons(root);
+}
+
+function exportDiagnostics() {
+  const directories = readDirectorySettings();
+  const payload = {
+    schema: "dota-lens-diagnostics/1.0",
+    generated_at: new Date().toISOString(),
+    app: {
+      version: APP_VERSION,
+      user_agent: navigator.userAgent,
+      online: navigator.onLine,
+    },
+    parser: state.parserStatus || { status: "unavailable" },
+    account: {
+      account_id: state.accountId || null,
+      match_count: state.matches.length,
+      match_source: state.matchesOffline ? "local_cache" : "opendota",
+      cache_fetched_at: state.matchesFetchedAt,
+    },
+    directories: Object.fromEntries(
+      Object.entries(directories).map(([key, value]) => [key, maskDiagnosticPath(value)]),
+    ),
+    tasks: state.taskHistory.slice(0, 10).map((job) => ({
+      id: job.id,
+      match_id: job.match_id,
+      status: job.status,
+      stage: job.stage,
+      progress: job.progress,
+      error_code: job.error_code || null,
+      updated_at: job.updated_at || null,
+    })),
+    current_analysis: state.currentAnalysis ? {
+      match_id: state.currentMatch?.id || null,
+      schema: state.currentAnalysis.schema || null,
+      generated_at: state.currentAnalysis.generated_at || null,
+      complete: Boolean(state.currentAnalysis.complete),
+    } : null,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `dota-lens-diagnostics-${Date.now()}.json`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showToast("诊断信息已导出", "文件不包含原始 Replay、原始事件或完整用户路径", "file-check");
 }
 
 function syncTopbarActions() {
@@ -5931,31 +7973,177 @@ function syncTopbarActions() {
   searchButton.classList.remove("hidden");
   if (state.page === "detail") {
     importButton.innerHTML = `<i data-lucide="rotate-cw"></i><span>重新解析</span>`;
-    searchButton.classList.toggle("hidden", !["timeline"].includes(state.detailView));
+    searchButton.classList.add("hidden");
   } else {
     importButton.innerHTML = `<i data-lucide="file-plus-2"></i><span>导入 Replay</span>`;
   }
   refreshIcons(importButton);
 }
 
+function matchSubjectPlayers(analysis) {
+  return [...(analysis?.match?.players || [])]
+    .filter((player) => Number.isFinite(Number(player.player_slot)))
+    .sort((left, right) => Number(left.player_slot) - Number(right.player_slot));
+}
+
+function renderMatchSubjectDialog() {
+  const analysis = state.pendingSubjectAnalysis;
+  if (!analysis) return;
+  const players = matchSubjectPlayers(analysis);
+  const positions = analysis.modules?.laning?.positions_by_slot || {};
+  const pendingSlot = state.pendingSubjectSlot === null
+    ? null : Number(state.pendingSubjectSlot);
+  const playerRows = players.map((player, index) => {
+    const meta = heroMeta(player.hero_id);
+    const playerSlot = Number(player.player_slot);
+    const position = Number(positions[String(index)]?.position) || index % 5 + 1;
+    const selected = pendingSlot !== null && playerSlot === pendingSlot;
+    const name = player.personaname || player.name || "匿名玩家";
+    return {
+      team: playerSlot < 128 ? "radiant" : "dire",
+      html: `<button class="match-subject-player ${selected ? "selected" : ""}" type="button" data-match-subject-slot="${playerSlot}" aria-pressed="${selected}">
+        <img src="${heroImage(meta.token)}" alt="${escapeHtml(meta.name)}">
+        <span><strong>${escapeHtml(name)}</strong><small>${escapeHtml(meta.name)} · ${positionLabel(position)}</small></span>
+        <em><b>${Number(player.kills) || 0} / ${Number(player.deaths) || 0} / ${Number(player.assists) || 0}</b>${Number(player.last_hits) || 0} 补 · ${Number(player.denies) || 0} 反</em>
+      </button>`,
+    };
+  });
+  document.querySelector("#match-subject-radiant").innerHTML = playerRows
+    .filter((row) => row.team === "radiant").map((row) => row.html).join("");
+  document.querySelector("#match-subject-dire").innerHTML = playerRows
+    .filter((row) => row.team === "dire").map((row) => row.html).join("");
+
+  const selectedPlayer = pendingSlot === null ? null : players.find((player) => (
+    Number(player.player_slot) === pendingSlot
+  ));
+  const selectedMeta = selectedPlayer ? heroMeta(selectedPlayer.hero_id) : null;
+  const selection = document.querySelector("#match-subject-selection");
+  selection.textContent = selectedPlayer
+    ? `已选择：${selectedPlayer.personaname || selectedPlayer.name || "匿名玩家"} · ${selectedMeta.name}`
+    : "尚未选择玩家";
+  selection.classList.toggle("ready", Boolean(selectedPlayer));
+  document.querySelector("#match-subject-confirm").disabled = !selectedPlayer;
+  installImageFallback(document.querySelector("#match-subject-dialog"), heroImage("unknown"));
+  refreshIcons(document.querySelector("#match-subject-dialog"));
+}
+
+function openMatchSubjectDialog(analysis, match, { required = false } = {}) {
+  const players = matchSubjectPlayers(analysis);
+  if (!players.length) {
+    showToast("无法选择分析玩家", "分析包中没有可识别的 Replay 阵容", "circle-alert");
+    if (required) setPage("matches");
+    return;
+  }
+  const subject = normalizeMatchSubject(analysis.match, state.accountId);
+  const selectedIndex = selectedPlayerIndex(players, subject);
+  state.pendingSubjectAnalysis = analysis;
+  state.pendingSubjectMatch = match;
+  state.pendingSubjectSlot = selectedIndex >= 0
+    ? Number(players[selectedIndex].player_slot) : null;
+  state.pendingSubjectRequired = required;
+
+  const message = document.querySelector("#match-subject-message");
+  message.textContent = required
+    ? subject.status === "invalidated"
+      ? "录像阵容与上次选择不一致，请重新确认本场使用的英雄。"
+      : subject.reason === "account_id_not_provided"
+        ? "本次 Replay 未绑定 Dota 2 游戏 ID，请确认本场使用的英雄。"
+        : `Dota 2 游戏 ID ${state.accountId || "--"} 未出现在录像阵容中，请确认本场使用的英雄。`
+    : "选择后会更新这场比赛的“本人”归属和默认分析玩家，不会重新解析 Replay。";
+  renderMatchSubjectDialog();
+  const dialog = document.querySelector("#match-subject-dialog");
+  if (!dialog.open) dialog.showModal();
+}
+
+function clearPendingMatchSubject() {
+  state.pendingSubjectAnalysis = null;
+  state.pendingSubjectMatch = null;
+  state.pendingSubjectSlot = null;
+  state.pendingSubjectRequired = false;
+}
+
+function dismissMatchSubjectDialog() {
+  const required = state.pendingSubjectRequired;
+  const dialog = document.querySelector("#match-subject-dialog");
+  if (dialog.open) dialog.close();
+  clearPendingMatchSubject();
+  if (required) setPage("matches");
+}
+
+async function confirmMatchSubject() {
+  const analysis = state.pendingSubjectAnalysis;
+  const match = state.pendingSubjectMatch;
+  if (state.pendingSubjectSlot === null) return;
+  const playerSlot = Number(state.pendingSubjectSlot);
+  if (!analysis || !match || !Number.isFinite(playerSlot)) return;
+  const confirm = document.querySelector("#match-subject-confirm");
+  const previousHtml = confirm.innerHTML;
+  const matchId = match.id;
+  confirm.disabled = true;
+  confirm.innerHTML = `<i data-lucide="loader-circle" class="is-spinning"></i><span>正在保存</span>`;
+  refreshIcons(confirm);
+  try {
+    const subject = await apiFetch(`/matches/${matchId}/subject`, {
+      method: "PUT",
+      body: { player_slot: playerSlot },
+      timeout: 15000,
+    });
+    analysis.match.subject = subject;
+    analysis.match.selected_player_slot = subject.selected_player_slot;
+    const resumeDetail = !state.pendingSubjectRequired && state.page === "detail";
+    const resumeView = state.detailView;
+    const resumeTime = state.currentTime;
+    document.querySelector("#match-subject-dialog").close();
+    clearPendingMatchSubject();
+    hydrateMatchFromAnalysis(match, analysis);
+    persistCurrentMatchesCache();
+    updateMatchSummary();
+    renderMatches();
+    applyAnalysisToProduct(analysis, match);
+    if (resumeDetail) {
+      setDetailView(resumeView);
+      updateCurrentTime(resumeTime, { syncSegment: false });
+    }
+    showToast("分析玩家已更新", "这场比赛会记住你的选择", "circle-check");
+  } catch (error) {
+    confirm.disabled = false;
+    confirm.innerHTML = previousHtml;
+    refreshIcons(confirm);
+    showToast("无法保存分析玩家", error.message || "请检查本地解析器状态", "circle-alert");
+  }
+}
+
 function applyAnalysisToProduct(analysis, match) {
   state.analysisModuleLoads.clear();
+  state.playerReportReviewWindow = null;
   normalizeAnalysisSnapshots(analysis);
+  const players = [...(analysis.match?.players || [])]
+    .sort((a, b) => Number(a.player_slot) - Number(b.player_slot));
+  const subject = normalizeMatchSubject(analysis.match, state.accountId);
+  const selectedIndex = selectedPlayerIndex(players, subject);
+  if (selectedIndex < 0) {
+    throw new Error("Analysis subject must be selected before opening personal analysis");
+  }
+  analysis.match.subject = subject;
+  analysis.match.selected_player_slot = subject.selected_player_slot;
   state.currentAnalysis = analysis;
   state.currentMatch = match;
+  const resolvedPatchLabel = patchResolutionLabel(
+    analysis.match?.patch_resolution,
+    analysis.match?.patch_name || (analysis.match?.patch ? `ID ${analysis.match.patch}` : ""),
+  );
   const replayRecord = {
     id: match.id,
     file: analysis.replay_file || `${match.id}.dem`,
     size: analysis.replay_bytes ? formatBytes(analysis.replay_bytes) : "已缓存",
     modified: formatGeneratedAt(analysis.generated_at),
-    patch: analysis.match?.patch_name || `ID ${analysis.match?.patch ?? "--"}`,
+    patch: resolvedPatchLabel,
     status: "full",
     package: formatBytes(analysis.raw_archive_bytes || analysis.raw_bytes),
     rawBytes: Number(analysis.raw_archive_bytes || analysis.raw_bytes) || 0,
   };
   state.replays = [replayRecord, ...state.replays.filter((replay) => replay.id !== match.id)];
   MATCH_DURATION = Math.max(1, Number(analysis.match?.duration || match.duration || 1));
-  const players = [...(analysis.match?.players || [])].sort((a, b) => Number(a.player_slot) - Number(b.player_slot));
   if (players.length) {
     const mappedHeroes = players.map((player, index) => {
       const meta = heroMeta(player.hero_id);
@@ -5968,7 +8156,7 @@ function applyAnalysisToProduct(analysis, match) {
         token: meta.token,
         name: meta.name,
         player: player.personaname || player.name || "匿名玩家",
-        me: String(player.account_id || "") === String(state.accountId),
+        me: Number(player.player_slot) === Number(subject.selected_player_slot),
         factor: 1,
         kills: Number(player.kills) || 0,
         deaths: Number(player.deaths) || 0,
@@ -5990,7 +8178,7 @@ function applyAnalysisToProduct(analysis, match) {
       };
     });
     HEROES.splice(0, HEROES.length, ...mappedHeroes);
-    state.selectedHeroSlot = Math.max(0, HEROES.findIndex((hero) => hero.me));
+    state.selectedHeroSlot = selectedIndex;
   }
   hydrateAnalysisModules(analysis);
 
@@ -6006,9 +8194,10 @@ function applyAnalysisToProduct(analysis, match) {
   document.querySelector("#detail-mode").textContent = match.mode;
   document.querySelector("#detail-start-time").textContent = match.date;
   document.querySelector("#detail-start-time-more").textContent = match.date;
-  const patchLabel = analysis.match?.patch_name || (analysis.match?.patch ? `ID ${analysis.match.patch}` : "--");
+  const patchLabel = resolvedPatchLabel;
   document.querySelector("#detail-patch").textContent = patchLabel;
   document.querySelector("#detail-patch-more").textContent = patchLabel;
+  document.querySelector("#detail-subject-name").textContent = HEROES[state.selectedHeroSlot]?.player || "--";
   document.querySelector("#detail-data-source").textContent = `本地 Replay · ${Number(analysis.valid_json_objects || 0).toLocaleString("zh-CN")} 条事件`;
   MATCH_START_MS = Math.min(0, Number(analysis.timeline?.game_start_ms || 0));
   document.querySelector("#global-time-slider").min = String(MATCH_START_MS);
@@ -6029,35 +8218,55 @@ function applyAnalysisToProduct(analysis, match) {
   renderSegments();
   renderTimelineMarkers();
   renderMapMarkers();
-  renderWardFilterOptions();
-  renderWardAnalysis();
-  renderFarmAnalysis();
-  renderBuild();
-  renderCombat();
-  filterTimelineEvents();
-  renderScoreboard();
-  renderPlayerScore();
-  renderCoverage();
   renderReplays();
   setPage("detail");
   setDetailView("development");
   updateCurrentTime(0, { syncSegment: false });
 }
 
+function hydrateMatchFromAnalysis(match, analysis) {
+  const detail = analysis?.match;
+  if (!match || !detail) return match;
+  const players = Array.isArray(detail.players) ? detail.players : [];
+  const subject = normalizeMatchSubject(detail, state.accountId);
+  const selectedIndex = selectedPlayerIndex(players, subject);
+  if (selectedIndex < 0) return match;
+  const selected = players[selectedIndex];
+  const refreshed = normalizeMatch({
+    ...(match.raw || {}),
+    ...detail,
+    ...selected,
+    match_id: detail.match_id || match.id,
+    local_status: "full",
+    local_analysis: true,
+    local_replay_cache: true,
+  });
+  Object.assign(match, refreshed, { status: "full", progress: null, localJob: null });
+  return match;
+}
+
 async function loadAnalysis(match) {
   const analysis = await apiFetch(`/matches/${match.id}/analysis`, { timeout: 60000 });
-  match.status = "full";
-  match.progress = null;
+  const subject = normalizeMatchSubject(analysis.match, state.accountId);
+  analysis.match.subject = subject;
+  if (selectedPlayerIndex(analysis.match?.players || [], subject) < 0) {
+    openMatchSubjectDialog(analysis, match, { required: true });
+    return false;
+  }
+  hydrateMatchFromAnalysis(match, analysis);
+  persistCurrentMatchesCache();
   updateMatchSummary();
   renderMatches();
   applyAnalysisToProduct(analysis, match);
   if (analysis.upgrade_required) {
     showToast("已打开旧版分析", "为避免再次超时，本次未同步重建索引；可用“重新解析”升级", "history");
   }
+  return true;
 }
 
 function rememberTask(job) {
-  state.taskHistory = [job, ...state.taskHistory.filter((item) => item.id !== job.id)].slice(0, 20);
+  state.taskHistory = upsertTaskHistory(state.taskHistory, job, 20);
+  writeStoredJson(TASK_HISTORY_KEY, state.taskHistory);
 }
 
 function updateMatchFromJob(job) {
@@ -6068,6 +8277,7 @@ function updateMatchFromJob(job) {
   match.status = job.status === "completed" ? "full"
     : job.status === "failed" ? "failed"
       : job.status === "canceled" ? "canceled" : "processing";
+  persistCurrentMatchesCache();
   updateMatchSummary();
   renderMatches();
   return match;
@@ -6087,7 +8297,7 @@ async function finishJob(job) {
       setPage("tasks");
     }
   } else if (job.status === "failed") {
-    showToast("Replay 解析失败", TASK_ERROR_MESSAGES[job.error_code] || job.message || "可在任务页重新解析", "circle-alert");
+    showToast("Replay 解析失败", taskErrorMessage(job), "circle-alert");
     setPage("tasks");
   } else if (job.status === "canceled") {
     showToast("Replay 解析已取消", `比赛 ${job.match_id} 的后台任务已经停止`, "circle-stop");
@@ -6100,6 +8310,7 @@ async function pollJob(jobId) {
   try {
     const job = await apiFetch(`/jobs/${jobId}`, { timeout: 15000 });
     state.activeJob = job;
+    rememberTask(job);
     updateMatchFromJob(job);
     renderTasks();
     if (["completed", "failed", "canceled"].includes(job.status)) {
@@ -6108,6 +8319,25 @@ async function pollJob(jobId) {
     }
     state.jobPollTimer = window.setTimeout(() => pollJob(jobId), 1200);
   } catch (error) {
+    if (error.status === 404) {
+      const interrupted = {
+        ...(state.activeJob || {}),
+        id: jobId,
+        match_id: state.activeJob?.match_id || state.currentMatch?.id || "unknown",
+        status: "failed",
+        stage: "failed",
+        progress: Number(state.activeJob?.progress || 0),
+        message: TASK_ERROR_MESSAGES.job_not_found,
+        error_code: "job_not_found",
+        updated_at: new Date().toISOString(),
+      };
+      state.activeJob = interrupted;
+      rememberTask(interrupted);
+      updateMatchFromJob(interrupted);
+      renderTasks();
+      showToast("上次解析任务已中断", "可使用本地 Replay 缓存重新解析，不会影响已有报告", "history");
+      return;
+    }
     showToast("任务状态读取失败", error.message, "wifi-off");
     state.jobPollTimer = window.setTimeout(() => pollJob(jobId), 3000);
   }
@@ -6133,6 +8363,7 @@ async function startAutomaticParse(match, force = false) {
       timeout: 15000,
     });
     state.activeJob = job;
+    rememberTask(job);
     updateMatchFromJob(job);
     renderTasks();
     if (job.status === "completed") await finishJob(job);
@@ -6240,24 +8471,55 @@ async function openMatch(match) {
   await startAutomaticParse(match, ["failed", "canceled"].includes(match.status));
 }
 
-function togglePlayback() {
-  state.isPlaying = !state.isPlaying;
+function syncPlaybackControls() {
   const button = document.querySelector("#play-toggle");
-  button.innerHTML = `<i data-lucide="${state.isPlaying ? "pause" : "play"}"></i>`;
-  button.title = state.isPlaying ? "暂停" : "播放";
-  refreshIcons(button);
+  if (button) {
+    button.innerHTML = `<i data-lucide="${state.isPlaying ? "pause" : "play"}"></i>`;
+    button.title = state.isPlaying ? "暂停" : "播放";
+    refreshIcons(button);
+  }
+  const reviewButton = document.querySelector("[data-player-report-review-play]");
+  if (reviewButton) {
+    reviewButton.innerHTML = state.isPlaying
+      ? '<i data-lucide="pause"></i><span>暂停</span>'
+      : '<i data-lucide="play"></i><span>从头播放</span>';
+    refreshIcons(reviewButton);
+  }
+}
+
+function stopPlaybackAt(playheadMs = state.playheadMs) {
+  state.isPlaying = false;
   if (state.timer) window.clearInterval(state.timer);
   state.timer = null;
+  if (Number.isFinite(Number(playheadMs))) {
+    updatePlayheadMs(Number(playheadMs), { syncSegment: false });
+  }
+  syncPlaybackControls();
+}
+
+function togglePlayback() {
+  const review = state.playerReportReviewWindow;
+  if (!state.isPlaying && review) {
+    const rangeStartMs = Number(review.navigation.rangeStart) * 1000;
+    const rangeEndMs = Number(review.navigation.rangeEnd) * 1000;
+    if (state.playheadMs < rangeStartMs || state.playheadMs >= rangeEndMs) {
+      updatePlayheadMs(rangeStartMs, { syncSegment: false });
+    }
+  }
+  state.isPlaying = !state.isPlaying;
+  if (state.timer) window.clearInterval(state.timer);
+  state.timer = null;
+  syncPlaybackControls();
   if (state.isPlaying) {
     state.timer = window.setInterval(() => {
       const nextMs = state.playheadMs + 250 * state.playbackRate;
-      if (nextMs >= MATCH_DURATION * 1000) {
-        state.isPlaying = false;
-        window.clearInterval(state.timer);
-        state.timer = null;
-        updatePlayheadMs(MATCH_DURATION * 1000);
-        button.innerHTML = `<i data-lucide="play"></i>`;
-        refreshIcons(button);
+      const activeReview = state.playerReportReviewWindow;
+      const rangeEndMs = Number(activeReview?.navigation?.rangeEnd) * 1000;
+      const playbackEndMs = activeReview && Number.isFinite(rangeEndMs)
+        ? Math.min(MATCH_DURATION * 1000, rangeEndMs)
+        : MATCH_DURATION * 1000;
+      if (nextMs >= playbackEndMs) {
+        stopPlaybackAt(playbackEndMs);
         return;
       }
       updatePlayheadMs(nextMs);
@@ -6278,15 +8540,208 @@ function jumpToEvent(direction) {
   if (target !== undefined) updateCurrentTime(target);
 }
 
-function importReplay(file) {
-  const fallbackName = "7284129980.dem";
-  const name = file?.name || fallbackName;
-  const id = name.match(/\d{8,}/)?.[0] || "7284129980";
-  const size = file?.size ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : "84.20 MB";
-  state.replays.unshift({ id, file: name, size, modified: "刚刚", patch: "检测中", status: "processing", package: "—" });
+function replayMatchId(fileName) {
+  return String(fileName || "").match(/(?:^|[^\d])(\d{8,12})(?:[^\d]|$)/)?.[1] || null;
+}
+
+function localReplayMatch(matchId) {
+  let match = state.matches.find((item) => item.id === String(matchId));
+  if (match) return match;
+  match = normalizeMatch({
+    match_id: String(matchId),
+    player_slot: 0,
+    radiant_win: null,
+    local_status: "processing",
+    local_replay_cache: true,
+  });
+  match.win = null;
+  match.date = "本地 Replay";
+  match.mode = "等待解析";
+  state.matches.unshift(match);
+  return match;
+}
+
+function beginReplayImport({ matchId, fileName, size, sourcePath = null, sourceLabel = "本机文件" }) {
+  const match = localReplayMatch(matchId);
+  match.status = "processing";
+  match.progress = 2;
+  const replayRow = {
+    id: matchId,
+    file: fileName,
+    size: formatBytes(size),
+    rawBytes: Number(size) || 0,
+    modified: "正在导入",
+    patch: "从 Replay 识别",
+    status: "processing",
+    package: sourceLabel,
+    sourcePath,
+  };
+  state.replays = [replayRow, ...state.replays.filter((item) => item.id !== matchId)];
+  state.activeJob = {
+    id: `upload-${matchId}`,
+    match_id: matchId,
+    status: "running",
+    stage: "importing_replay",
+    progress: 3,
+    message: "正在导入本机 Replay",
+    cancelable: false,
+  };
+  state.currentMatch = match;
+  renderMatches();
   renderReplays();
-  document.querySelector("#task-badge").textContent = "2";
-  showToast("Replay 已加入队列", `${name} · 等待解析`, "file-check-2");
+  renderTasks();
+  setPage("tasks");
+  return { match, replayRow };
+}
+
+async function followImportedReplay(job, match) {
+  state.activeJob = job;
+  state.currentMatch = match;
+  rememberTask(job);
+  updateMatchFromJob(job);
+  renderTasks();
+  if (job.status === "completed") await finishJob(job);
+  else await pollJob(job.id);
+}
+
+async function runReplayImport(replay, importAction) {
+  const online = state.parserOnline || await checkParserStatus();
+  if (!online) {
+    showToast("本地解析器未连接", "启动本地解析器后再导入 Replay", "plug-zap");
+    return;
+  }
+
+  const { match, replayRow } = beginReplayImport(replay);
+  try {
+    const job = await importAction();
+    replayRow.modified = "刚刚";
+    showToast("Replay 已导入", `${replay.fileName} · 开始本地逐帧解析`, "file-check-2");
+    await followImportedReplay(job, match);
+  } catch (error) {
+    const failed = {
+      id: `import-${Date.now()}`,
+      match_id: replay.matchId,
+      status: "failed",
+      stage: "failed",
+      progress: 3,
+      message: error.name === "AbortError" ? "Replay 导入超时" : error.message,
+      error_code: error.code || "invalid_replay_file",
+      updated_at: new Date().toISOString(),
+    };
+    await finishJob(failed);
+  } finally {
+    renderReplays();
+  }
+}
+
+async function importReplay(file) {
+  if (!file) return;
+  const matchId = replayMatchId(file.name);
+  if (!matchId) {
+    showToast("无法识别比赛 ID", "Replay 文件名需要包含比赛数字 ID，例如 8909845275.dem", "circle-alert");
+    return;
+  }
+  if (!/\.dem(?:\.bz2)?$/i.test(file.name)) {
+    showToast("文件格式不支持", "请选择 .dem 或 .dem.bz2 Replay", "circle-alert");
+    return;
+  }
+  await runReplayImport({
+    matchId,
+    fileName: file.name,
+    size: file.size,
+    sourceLabel: "本机文件",
+  }, async () => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 10 * 60 * 1000);
+    try {
+      const response = await fetch(`${API_BASE}/replays/${matchId}/import`, {
+        method: "POST",
+        body: file,
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "X-Dota-Lens-File-Name": file.name,
+          "X-Dota-Lens-Account-Id": validAccountId(state.accountId) ? state.accountId : "",
+        },
+        signal: controller.signal,
+      });
+      const text = await response.text();
+      const job = text ? JSON.parse(text) : {};
+      if (!response.ok) {
+        const error = new Error(job.message || `本地服务返回 HTTP ${response.status}`);
+        error.code = job.error || "invalid_replay_file";
+        throw error;
+      }
+      return job;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  });
+}
+
+async function scanReplayDirectory(button = document.querySelector("#scan-replays")) {
+  if (!window.dotaLensDesktop?.scanReplayDirectory) {
+    showToast("桌面扫描不可用", "网页预览中请使用“导入文件”；桌面客户端支持扫描 Replay 目录", "monitor-x");
+    return;
+  }
+  const input = document.querySelector("#settings-replay-path");
+  const directory = input?.value.trim() || readDirectorySettings().replay || "";
+  if (!directory) {
+    setPage("settings");
+    setSettingsPanel("dota");
+    showToast("请先选择 Replay 目录", "设置 > Dota 与 Replay", "folder-open");
+    return;
+  }
+
+  button.disabled = true;
+  button.classList.add("is-spinning");
+  try {
+    const results = await window.dotaLensDesktop.scanReplayDirectory(directory);
+    const previous = new Map(state.replays.map((replay) => [replay.id, replay]));
+    state.replays = results.map((replay) => {
+      const known = previous.get(replay.matchId);
+      const match = state.matches.find((item) => item.id === replay.matchId);
+      return {
+        id: replay.matchId,
+        file: replay.fileName,
+        size: formatBytes(replay.size),
+        rawBytes: Number(replay.size) || 0,
+        modified: formatGeneratedAt(replay.modifiedAt),
+        patch: match?.raw?.patch_name || known?.patch || "从 Replay 识别",
+        status: match?.status === "full" ? "full" : known?.status || "basic",
+        package: match?.status === "full" ? "分析包就绪" : "待解析",
+        sourcePath: replay.filePath,
+      };
+    });
+    renderReplays();
+    showToast(
+      state.replays.length ? "Replay 扫描完成" : "目录中没有 Replay",
+      state.replays.length ? `发现 ${state.replays.length} 个可导入文件` : directory,
+      "scan-search",
+    );
+  } catch (error) {
+    showToast("Replay 扫描失败", error?.message || "请检查目录是否存在且可读取", "circle-alert");
+  } finally {
+    button.disabled = false;
+    button.classList.remove("is-spinning");
+  }
+}
+
+async function importScannedReplay(replay) {
+  if (!replay?.sourcePath || !window.dotaLensDesktop?.importReplayPath) {
+    showToast("无法读取该 Replay", "请重新扫描目录或使用“导入文件”", "circle-alert");
+    return;
+  }
+  await runReplayImport({
+    matchId: replay.id,
+    fileName: replay.file,
+    size: replay.rawBytes,
+    sourcePath: replay.sourcePath,
+    sourceLabel: "扫描目录",
+  }, () => window.dotaLensDesktop.importReplayPath({
+    filePath: replay.sourcePath,
+    matchId: replay.id,
+    accountId: validAccountId(state.accountId) ? state.accountId : "",
+  }));
 }
 
 
@@ -6304,19 +8759,52 @@ function bindEvents() {
   });
   document.querySelector("#detail-more-popover").addEventListener("click", (event) => event.stopPropagation());
   document.addEventListener("click", () => setDetailMoreOpen(false));
+  document.querySelector("#switch-match-subject").addEventListener("click", () => {
+    if (state.currentAnalysis && state.currentMatch) {
+      openMatchSubjectDialog(state.currentAnalysis, state.currentMatch);
+    }
+  });
   document.querySelector("#account-lookup-form").addEventListener("submit", (event) => {
     event.preventDefault();
-    loadMatches(document.querySelector("#account-id-input").value);
+    const limit = setMatchLimit(document.querySelector("#match-limit-input").value);
+    loadMatches(document.querySelector("#account-id-input").value, { limit });
   });
   document.querySelector(".primary-nav").addEventListener("click", (event) => {
     const button = event.target.closest("[data-page]");
     if (button) setPage(button.dataset.page);
   });
+  document.querySelector("#page-help").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-help-image]");
+    if (button) openHelpImageDialog(button);
+  });
+  const helpImageDialog = document.querySelector("#help-image-dialog");
+  document.querySelector("#help-image-dialog-close").addEventListener("click", () => helpImageDialog.close());
+  helpImageDialog.addEventListener("click", (event) => {
+    if (event.target === helpImageDialog) helpImageDialog.close();
+  });
   document.querySelector("#back-to-matches").addEventListener("click", () => setPage("matches"));
   document.querySelector("#parser-status").addEventListener("click", () => setPage("tasks"));
   document.querySelector("#matches-list").addEventListener("click", (event) => {
+    if (event.target.closest("[data-copy-match-error]")) {
+      void copyFeedback(buildMatchListFailureReport({
+        errorCode: state.matchesErrorCode,
+        errorMessage: state.matchesError,
+        parserStatus: state.parserStatus || { status: state.parserOnline ? "ready" : "unavailable" },
+        appVersion: APP_VERSION,
+      }));
+      return;
+    }
     if (event.target.closest("[data-retry-matches]")) {
       loadMatches(state.accountId);
+      return;
+    }
+    if (event.target.closest("[data-import-private-replay]")) {
+      document.querySelector("#replay-file-input").click();
+      return;
+    }
+    if (event.target.closest("[data-scan-private-replays]")) {
+      setPage("replays");
+      void scanReplayDirectory();
       return;
     }
     const row = event.target.closest("[data-match-id]");
@@ -6343,6 +8831,23 @@ function bindEvents() {
     if (event.target === matchDialog) matchDialog.close();
   });
   matchDialog.addEventListener("close", () => { state.pendingMatch = null; });
+  const subjectDialog = document.querySelector("#match-subject-dialog");
+  document.querySelector("#match-subject-close").addEventListener("click", dismissMatchSubjectDialog);
+  document.querySelector("#match-subject-cancel").addEventListener("click", dismissMatchSubjectDialog);
+  document.querySelector("#match-subject-confirm").addEventListener("click", confirmMatchSubject);
+  document.querySelector(".match-subject-teams").addEventListener("click", (event) => {
+    const player = event.target.closest("[data-match-subject-slot]");
+    if (!player) return;
+    state.pendingSubjectSlot = Number(player.dataset.matchSubjectSlot);
+    renderMatchSubjectDialog();
+  });
+  subjectDialog.addEventListener("click", (event) => {
+    if (event.target === subjectDialog) dismissMatchSubjectDialog();
+  });
+  subjectDialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    dismissMatchSubjectDialog();
+  });
   document.querySelector("#match-status-filter").addEventListener("click", (event) => {
     const button = event.target.closest("[data-status]");
     if (!button) return;
@@ -6359,7 +8864,6 @@ function bindEvents() {
       syncTopbarActions();
     }
   });
-  document.querySelector("#coverage-shortcut").addEventListener("click", () => setDetailView("coverage"));
   document.querySelector("#hero-strip").addEventListener("click", (event) => {
     const button = event.target.closest("[data-hero-slot]");
     if (button) selectHero(button.dataset.heroSlot);
@@ -6408,7 +8912,10 @@ function bindEvents() {
   }));
   document.querySelectorAll("#development-map-markers, #full-map-markers, #map-event-list").forEach((container) => container.addEventListener("click", (event) => {
     const target = event.target.closest("[data-map-time]");
-    if (target) updateCurrentTime(target.dataset.mapTime);
+    if (target) {
+      if (target.dataset.mapEventId) state.selectedMapEventId = target.dataset.mapEventId;
+      updateCurrentTime(target.dataset.mapTime);
+    }
   }));
   document.querySelectorAll("[data-ward-layer]").forEach((button) => button.addEventListener("click", () => {
     const layer = button.dataset.wardLayer;
@@ -6520,7 +9027,10 @@ function bindEvents() {
   });
   document.querySelector("#build-tracks").addEventListener("click", (event) => {
     const target = event.target.closest("[data-build-time-ms]");
-    if (target) updatePlayheadMs(target.dataset.buildTimeMs);
+    if (target) {
+      if (target.dataset.buildEventId) state.selectedBuildEventId = target.dataset.buildEventId;
+      updatePlayheadMs(target.dataset.buildTimeMs);
+    }
   });
   document.querySelector("#usage-list").addEventListener("click", (event) => {
     const target = event.target.closest("[data-build-time-ms]");
@@ -6559,14 +9069,61 @@ function bindEvents() {
     updatePlayheadMs(phase.dataset.combatPhaseTimeMs, { syncSegment: false });
     renderSelectedCombat();
   });
-  ["#combat-contribution-table", "#combat-map-players"].forEach((selector) => {
+  document.querySelector("#combat-contribution-scope").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-combat-contribution-scope]");
+    if (!button) return;
+    state.combatContributionScope = button.dataset.combatContributionScope === "all" ? "all" : "current";
+    renderSelectedCombat();
+  });
+  document.querySelector("#combat-contribution-metrics").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-combat-contribution-metric]");
+    if (!button) return;
+    state.combatContributionMetric = button.dataset.combatContributionMetric;
+    state.selectedCombatContributionDimension = state.combatContributionMetric;
+    renderSelectedCombat();
+  });
+  ["#combat-contribution-labels", "#combat-map-players"].forEach((selector) => {
     document.querySelector(selector).addEventListener("click", (event) => {
       const player = event.target.closest("[data-combat-player-slot]");
       if (!player) return;
       state.selectedCombatPlayerSlot = Number(player.dataset.combatPlayerSlot);
+      state.selectedCombatContributionDimension = state.combatContributionMetric;
       state.combatInspectorView = "audit";
       renderSelectedCombat();
       if (window.innerWidth < 1280) setCombatCompactView("audit");
+      focusCombatAudit("player");
+    });
+  });
+  document.querySelector("#combat-score-components").addEventListener("click", (event) => {
+    const component = event.target.closest("[data-combat-contribution-dimension]");
+    if (!component) return;
+    state.selectedCombatContributionDimension = component.dataset.combatContributionDimension;
+    const fight = selectedCombatFight();
+    if (!fight) return;
+    renderCombatPlayerAudit(fight, combatContributionRows(fight, fightContributions(fight)));
+    focusCombatAudit("dimension");
+  });
+  document.querySelector("#combat-dimension-detail").addEventListener("click", (event) => {
+    const evidence = event.target.closest("[data-combat-evidence-time-ms]");
+    if (!evidence) return;
+    const fightId = evidence.dataset.combatEvidenceFightId;
+    if (fightId && COMBAT_SEGMENTS.some((fight) => String(fight.id) === String(fightId))) {
+      state.selectedCombatId = fightId;
+      state.selectedCombatPhase = "clash";
+      renderSelectedCombat();
+    }
+    updatePlayheadMs(evidence.dataset.combatEvidenceTimeMs, { syncSegment: false });
+    setCombatInspectorView("events");
+    if (window.innerWidth < 1280) setCombatCompactView("events");
+    const sequence = evidence.dataset.combatEvidenceSeq;
+    window.requestAnimationFrame(() => {
+      const target = sequence
+        ? document.querySelector(`#combat-event-stream [data-event-seq="${CSS.escape(sequence)}"]`)
+        : null;
+      if (!target) return;
+      target.scrollIntoView({ block: "center", behavior: "smooth" });
+      target.classList.add("evidence-highlight");
+      window.setTimeout(() => target.classList.remove("evidence-highlight"), 1800);
     });
   });
   document.querySelector("#combat-inspector-tabs").addEventListener("click", (event) => {
@@ -6582,19 +9139,6 @@ function bindEvents() {
   document.querySelector("#combat-context-summary").addEventListener("click", (event) => {
     const row = event.target.closest("[data-combat-context-time-ms]");
     if (row) updatePlayheadMs(row.dataset.combatContextTimeMs);
-  });
-  document.querySelector("#event-filter").addEventListener("click", (event) => {
-    const button = event.target.closest("[data-event-filter]");
-    if (!button) return;
-    state.eventFilter = button.dataset.eventFilter;
-    document.querySelectorAll("#event-filter button").forEach((item) => item.classList.toggle("active", item === button));
-    filterTimelineEvents();
-  });
-  document.querySelector("#event-search").addEventListener("input", filterTimelineEvents);
-  document.querySelector("#event-table").addEventListener("scroll", renderVirtualEvents, { passive: true });
-  document.querySelector("#event-table").addEventListener("click", (event) => {
-    const row = event.target.closest("[data-event-time-ms]");
-    if (row) updatePlayheadMs(row.dataset.eventTimeMs);
   });
   document.querySelector("#scoreboard-body").addEventListener("click", (event) => {
     const row = event.target.closest("[data-player-slot]");
@@ -6618,6 +9162,15 @@ function bindEvents() {
   document.querySelector("#player-score-evidence-backdrop").addEventListener("click", () => {
     setPlayerScoreEvidenceOpen(false);
   });
+  document.querySelector("#player-report-review-bar").addEventListener("click", (event) => {
+    if (event.target.closest("[data-player-report-review-play]")) {
+      togglePlayerReportReviewPlayback();
+      return;
+    }
+    if (event.target.closest("[data-player-report-review-return]")) {
+      returnToPlayerScoreReport();
+    }
+  });
   document.querySelector("#detail-player-score").addEventListener("click", (event) => {
     const filter = event.target.closest("[data-player-score-roster-filter]");
     if (filter) {
@@ -6625,22 +9178,17 @@ function bindEvents() {
       renderPlayerScoreRoster();
       return;
     }
-    const mode = event.target.closest("[data-player-score-mode]");
-    if (mode) {
-      state.playerScoreMode = mode.dataset.playerScoreMode === "deep" ? "deep" : "brief";
-      window.localStorage.setItem(PLAYER_SCORE_MODE_KEY, state.playerScoreMode);
-      const model = playerScoreModel();
-      renderPlayerScoreHeader(model);
-      renderPlayerScoreContent(model);
-      renderPlayerScoreEvidence(model);
+    const simpleFilter = event.target.closest("[data-simple-report-filter]");
+    if (simpleFilter) {
+      state.simpleReportFilter = simpleFilter.dataset.simpleReportFilter;
+      renderPlayerScoreContent(playerScoreModel());
       return;
     }
     const openDimension = event.target.closest("[data-player-score-open-dimension]");
     if (openDimension) {
-      state.playerScoreMode = "deep";
+      setReadingMode("professional", { render: false });
       state.playerScoreSection = "overview";
       state.selectedPlayerScoreEvidence = { type: "dimension", id: openDimension.dataset.playerScoreOpenDimension };
-      window.localStorage.setItem(PLAYER_SCORE_MODE_KEY, state.playerScoreMode);
       const model = playerScoreModel();
       renderPlayerScoreHeader(model);
       renderPlayerScoreContent(model);
@@ -6668,6 +9216,39 @@ function bindEvents() {
       startAutomaticParse(state.currentMatch, true);
       return;
     }
+    const retry = event.target.closest("[data-player-score-retry]");
+    if (retry) {
+      if (state.currentAnalysis?.module_load_errors) delete state.currentAnalysis.module_load_errors.players;
+      renderPlayerScore();
+      void ensureAnalysisModulesForView("player-score");
+      return;
+    }
+    const occurrenceReview = event.target.closest("[data-player-score-review-occurrence]");
+    if (occurrenceReview) {
+      reviewPlayerScoreInsight(
+        occurrenceReview.dataset.playerScoreReviewOccurrence,
+        occurrenceReview.dataset.playerScoreOccurrenceIndex,
+      );
+      return;
+    }
+    const review = event.target.closest("[data-player-score-review]");
+    if (review) {
+      reviewPlayerScoreInsight(review.dataset.playerScoreReview);
+      return;
+    }
+    const timingFight = event.target.closest("[data-player-score-combat-timing-fight]");
+    if (timingFight) {
+      const fightId = timingFight.dataset.playerScoreCombatTimingFight;
+      state.selectedPlayerScoreEvidence = { type: "combat", id: fightId };
+      state.selectedCombatId = fightId;
+      state.selectedCombatPlayerSlot = state.selectedHeroSlot;
+      state.combatFilter = "all";
+      jumpFromPlayerScore("combat", timingFight.dataset.playerScoreTime);
+      window.requestAnimationFrame(() => {
+        renderCombat({ centerSelection: true, scrollBehavior: "smooth" });
+      });
+      return;
+    }
     const jump = event.target.closest("[data-player-score-jump]");
     if (jump) {
       jumpFromPlayerScore(jump.dataset.playerScoreJump, jump.dataset.playerScoreTime);
@@ -6685,7 +9266,7 @@ function bindEvents() {
       if (state.playerScoreSection === "vision" && state.selectedPlayerScoreEvidence.type === "ward") renderPlayerScoreContent(model);
       else document.querySelectorAll("#player-score-content [data-player-score-evidence-type]").forEach((item) => item.classList.toggle("active", item === evidence));
       renderPlayerScoreEvidence(model);
-      if (window.innerWidth < 1180) setPlayerScoreEvidenceOpen(true);
+      if (state.readingMode === "simple" || window.innerWidth < 1180) setPlayerScoreEvidenceOpen(true);
       return;
     }
     const timeline = event.target.closest("[data-player-score-time]");
@@ -6722,28 +9303,41 @@ function bindEvents() {
     }
   }));
   fileInput.addEventListener("change", () => {
-    if (fileInput.files?.[0]) importReplay(fileInput.files[0]);
+    if (fileInput.files?.[0]) void importReplay(fileInput.files[0]);
     fileInput.value = "";
   });
   document.querySelector("#scan-replays").addEventListener("click", (event) => {
-    event.currentTarget.classList.add("is-spinning");
-    window.setTimeout(() => {
-      event.currentTarget.classList.remove("is-spinning");
-      showToast("扫描完成", "没有发现新的本地 Replay", "scan-search");
-    }, 800);
+    void scanReplayDirectory(event.currentTarget);
   });
   document.querySelector("#replay-list").addEventListener("click", (event) => {
     const button = event.target.closest("[data-replay-action]");
     if (!button) return;
-    const match = state.matches.find((item) => item.id === button.dataset.replayId) || DEMO_MATCHES[0];
-    if (button.dataset.replayAction === "open") openMatch(match);
-    else if (state.matches.includes(match)) startAutomaticParse(match);
-    else showToast("请先从比赛列表读取该场", `比赛 ${button.dataset.replayId}`, "list-search");
+    const replay = state.replays.find((item) => item.id === button.dataset.replayId);
+    const match = state.matches.find((item) => item.id === button.dataset.replayId);
+    if (button.dataset.replayAction === "open" && match) {
+      void openMatch(match);
+    } else if (replay?.sourcePath) {
+      void importScannedReplay(replay);
+    } else {
+      fileInput.click();
+    }
   });
   document.querySelector("#current-task-panel").addEventListener("click", (event) => {
     const button = event.target.closest("[data-task-action]");
     if (!button) return;
     if (button.dataset.taskAction === "matches") setPage("matches");
+    if (button.dataset.taskAction === "copy-error") {
+      const job = state.activeJob?.id === button.dataset.jobId
+        ? state.activeJob
+        : state.taskHistory.find((item) => item.id === button.dataset.jobId);
+      if (job) {
+        void copyFeedback(buildParseFailureReport(job, {
+          appVersion: APP_VERSION,
+          parserStatus: state.parserStatus || { status: state.parserOnline ? "ready" : "unavailable" },
+        }), "已隐藏账号信息，可直接粘贴给开发者");
+      }
+      return;
+    }
     if (button.dataset.taskAction === "cancel") {
       cancelActiveJob();
       return;
@@ -6766,6 +9360,9 @@ function bindEvents() {
     if (!button) return;
     setSettingsPanel(button.dataset.settingsPanel);
   });
+  document.querySelectorAll("[data-reading-mode]").forEach((button) => button.addEventListener("click", () => {
+    setReadingMode(button.dataset.readingMode);
+  }));
   document.querySelector(".settings-content").addEventListener("click", (event) => {
     const picker = event.target.closest("[data-directory-picker]");
     if (picker) chooseSettingsDirectory(picker);
@@ -6776,12 +9373,17 @@ function bindEvents() {
     if (value) persistDirectorySetting(input.dataset.settingsPath, value);
   }));
   document.querySelector("#settings-verify-account").addEventListener("click", () => {
+    const limit = setMatchLimit(document.querySelector("#settings-match-limit").value);
     setPage("matches");
-    loadMatches(document.querySelector("#settings-account-id").value);
+    loadMatches(document.querySelector("#settings-account-id").value, { limit });
   });
-  document.querySelector(".settings-content").addEventListener("click", (event) => {
-    if (event.target.closest(".command-button") && !event.target.closest("#settings-verify-account")) showToast("设置已保存", "本地配置已更新", "save");
+  document.querySelectorAll("#match-limit-input, #settings-match-limit").forEach((input) => {
+    input.addEventListener("change", () => setMatchLimit(input.value));
   });
+  document.querySelector("#settings-export-diagnostics").addEventListener("click", exportDiagnostics);
+  document.querySelector("#update-check").addEventListener("click", () => void runUpdateAction("check"));
+  document.querySelector("#update-download").addEventListener("click", () => void runUpdateAction("download"));
+  document.querySelector("#update-install").addEventListener("click", () => void runUpdateAction("install"));
   document.querySelector("#topbar-refresh").addEventListener("click", async (event) => {
     event.currentTarget.classList.add("is-spinning");
     await checkParserStatus();
@@ -6789,8 +9391,7 @@ function bindEvents() {
     event.currentTarget.classList.remove("is-spinning");
   });
   document.querySelector("#global-search-toggle").addEventListener("click", () => {
-    const input = state.page === "detail" && state.detailView === "timeline" ? document.querySelector("#event-search") : document.querySelector("#match-search");
-    input?.focus();
+    document.querySelector("#match-search")?.focus();
   });
   document.querySelector("#account-menu").addEventListener("click", () => {
     setPage("matches");
@@ -6819,7 +9420,7 @@ function bindEvents() {
     event.preventDefault();
     dragDepth = 0;
     document.querySelector("#drop-overlay").classList.add("hidden");
-    if (event.dataTransfer?.files?.[0]) importReplay(event.dataTransfer.files[0]);
+    if (event.dataTransfer?.files?.[0]) void importReplay(event.dataTransfer.files[0]);
   });
 
   window.addEventListener("keydown", (event) => {
@@ -6848,6 +9449,18 @@ function bindEvents() {
     if (window.innerWidth >= 1180 && state.playerScoreEvidenceOpen) setPlayerScoreEvidenceOpen(false);
     const chartContainer = document.querySelector("#development-chart");
     if (state.chart && chartContainer?.clientWidth > 1 && chartContainer?.clientHeight > 1) state.chart.resize();
+    const contributionChart = document.querySelector("#combat-contribution-chart");
+    if (state.combatContributionChart
+      && contributionChart?.clientWidth > 1
+      && contributionChart?.clientHeight > 1) {
+      state.combatContributionChart.resize();
+    }
+    const responsibilityRadar = document.querySelector("#combat-responsibility-radar");
+    if (state.combatResponsibilityRadar
+      && responsibilityRadar?.clientWidth > 1
+      && responsibilityRadar?.clientHeight > 1) {
+      state.combatResponsibilityRadar.resize();
+    }
     if (state.page === "detail" && state.detailView === "combat") {
       window.requestAnimationFrame(() => resolveCombatMarkerCollisions(document.querySelector("#combat-map-players")));
     }
@@ -6859,6 +9472,7 @@ function bindEvents() {
 
 async function init() {
   restoreDirectorySettings();
+  syncMatchLimitControls();
   applyScoreboardStressFixture();
   applySidebarLayout();
   setWardSideView(state.wardSideView);
@@ -6866,29 +9480,19 @@ async function init() {
   setFarmCompactView(state.farmCompactView);
   setBuildCompactView(state.buildCompactView);
   setCombatCompactView(state.combatCompactView);
+  readingModeController.restore();
+  if (PREVIEW_READING_MODE) {
+    readingModeController.set(PREVIEW_READING_MODE, { persist: false, render: false });
+  }
   setPlayerScoreEvidenceOpen(false);
   renderMatches();
-  renderHeroStrip();
-  renderLaneReview();
-  setDevelopmentSideView(state.developmentSideView);
-  renderSegments();
-  renderTimelineMarkers();
-  renderMapMarkers();
-  renderWardFilterOptions();
-  renderWardAnalysis();
-  renderFarmAnalysis();
-  renderBuild();
-  renderCombat();
-  filterTimelineEvents();
-  renderScoreboard();
-  renderPlayerScore();
-  renderCoverage();
   renderReplays();
   renderTasks();
   bindEvents();
-  setPage("matches");
+  await setupUpdateCenter();
+  setupCombatChartResizeObserver();
+  setPage("help");
   updateAccountChrome();
-  updateCurrentTime(state.currentTime, { syncSegment: false });
   refreshIcons();
   if (PREVIEW_VIEW) {
     if (PREVIEW_VIEW === "matches") {
@@ -6901,7 +9505,7 @@ async function init() {
       setPage("matches");
       return;
     }
-    if (PREVIEW_VIEW === "replays" || PREVIEW_VIEW === "tasks") {
+    if (PREVIEW_VIEW === "replays" || PREVIEW_VIEW === "tasks" || PREVIEW_VIEW === "help") {
       setPage(PREVIEW_VIEW);
       return;
     }
@@ -6914,30 +9518,47 @@ async function init() {
       const online = await checkParserStatus();
       if (!online) throw new Error("真实比赛预览需要本地解析器在线");
       const analysis = await apiFetch(`/matches/${PREVIEW_MATCH_ID}/analysis`, { timeout: 60000 });
-      const player = analysis.match?.players?.find((item) => String(item.account_id || "") === String(state.accountId))
-        || analysis.match?.players?.[0]
-        || {};
+      const players = Array.isArray(analysis.match?.players) ? analysis.match.players : [];
+      const subject = normalizeMatchSubject(analysis.match, state.accountId);
+      const selectedIndex = selectedPlayerIndex(players, subject);
+      const player = selectedIndex >= 0 ? players[selectedIndex] : {};
       const match = normalizeMatch({
         ...analysis.match,
         ...player,
         match_id: PREVIEW_MATCH_ID,
         local_status: "full",
       });
-      applyAnalysisToProduct(analysis, match);
-      setDetailView(["development", "farm", "vision", "combat", "player-score", "players"].includes(PREVIEW_VIEW) ? PREVIEW_VIEW : "farm");
       document.documentElement.dataset.qaMatchLoaded = PREVIEW_MATCH_ID;
+      if (selectedIndex < 0) {
+        openMatchSubjectDialog(analysis, match, { required: true });
+        return;
+      }
+      applyAnalysisToProduct(analysis, match);
+      setDetailView(["development", "farm", "map", "vision", "combat", "player-score", "players"].includes(PREVIEW_DETAIL_VIEW) ? PREVIEW_DETAIL_VIEW : "farm");
       return;
     }
     state.currentMatch = { ...DEMO_MATCHES[0], id: "preview" };
+    renderHeroStrip();
+    renderLaneReview();
+    setDevelopmentSideView(state.developmentSideView);
+    renderSegments();
+    renderTimelineMarkers();
+    renderMapMarkers();
+    renderWardFilterOptions();
     setPage("detail");
-    setDetailView(["development", "farm", "vision", "combat", "player-score", "players"].includes(PREVIEW_VIEW) ? PREVIEW_VIEW : "farm");
+    setDetailView(["development", "farm", "map", "vision", "combat", "player-score", "players"].includes(PREVIEW_DETAIL_VIEW) ? PREVIEW_DETAIL_VIEW : "farm");
+    updateCurrentTime(state.currentTime, { syncSegment: false });
     return;
   }
   const online = await checkParserStatus();
   state.parserPollTimer = window.setInterval(() => checkParserStatus({ retries: 0 }), 10000);
+  if (online && state.activeJob?.id) {
+    renderTasks();
+    void pollJob(state.activeJob.id);
+  }
   if (online && validAccountId(state.accountId)) {
     await loadMatches(state.accountId, { silent: true });
-  } else if (online) {
+  } else if (online && state.page === "matches") {
     document.querySelector("#account-id-input").focus();
   }
 }

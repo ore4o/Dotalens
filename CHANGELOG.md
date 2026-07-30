@@ -1,5 +1,96 @@
 # Changelog
 
+## Unreleased
+
+No changes yet.
+
+## 0.5.1 - 2026-07-29
+
+### Fixed
+
+- Detect downloaded Replay compression from the payload signature instead of trusting the `.dem.bz2` suffix.
+- Decompress Valve Replay payloads encoded with either BZip2 or Zstandard, preventing valid matches from failing with `Stream is not in the BZip2 format`.
+- Accept Zstandard-compressed files through the trusted local Replay import path.
+- Keep player-report key-moment text rendering available outside the simple-report renderer.
+- Wait for player-report and combat charts before completing packaged desktop QA captures.
+
+### Validation
+
+- Parsed match `8918837931` from its real Zstandard payload into `202,001` events.
+- Passed the complete frontend, tools, desktop and parser test suites.
+
+## 0.5.0 - 2026-07-29
+
+### Added
+
+- Let users choose how many recent matches to load, from 1 to 500, with a persisted default of 20.
+- Add `player-report/4.0` with recomputable overall and dimension scores, atomic evidence, role-specific duties, root-cause merging, and a six-point per-root overall penalty cap.
+- Add `player-report-event-candidates/1.1`, combining combat, deaths, wards, objectives, teleports, purchases, item delivery, lane pressure, rune control, support routes, suspected pulls, and level-spike windows.
+- Add simple and professional reading modes. Simple mode keeps plain-language full-match strengths, problems, facts, advice, maps, and bounded Replay jumps; professional mode expands formulas and technical evidence.
+- Add complete item purchase-to-delivery-to-usable timing, lane meeting and push-depth facts, rune value, support-away evidence, suspected pulls, and level-spike usage.
+- Add a first-launch usage guide with operation screenshots and an in-app update center.
+- Add a 15-Replay, 150-player protocol matrix and 15 reviewed five-position Golden reports.
+
+### Changed
+
+- Forward the selected match count through Parser API `1.7.0` to OpenDota instead of fixing every request at 20 matches.
+- Select all evidence-gated important moments instead of fixed phase stories, and give every actionable conclusion a time, map position, entity, module, and bounded playback range.
+- Make the usage guide the default page, remove the standalone full-timeline and data-coverage tabs, and keep secondary metrics collapsed in simple mode.
+- Keep local Replay analysis available when OpenDota is offline or a high-MMR public match has no downloadable Replay.
+- Persist task history and reading preferences across application restarts.
+
+### Fixed
+
+- Prevent the same outcome or root cause from being scored twice across dimensions.
+- Keep item-delivery and purchase jump identities distinct while selecting the localized delivery fact as the primary story.
+- Synchronize the configurable match-count copy across the match list and account settings.
+- Bind a player before EXE layout capture so covered analysis pages cannot produce false-positive screenshots.
+- Keep all three vision filters readable at the 1024-pixel desktop viewport.
+- Preserve localized hero portraits and reject broken hero images in desktop layout smoke tests.
+
+### Known limitations
+
+- The Windows installer is not code-signed and may trigger Microsoft Defender SmartScreen.
+- Electron still uses its default application icon.
+- The main entry and chart runtime bundles remain larger than 500 kB after minification.
+- Replay parsing can peak near 2 GB of parser memory on large matches.
+
+## 0.4.5 - 2026-07-25
+
+### Added
+
+- Persist a per-match analysis subject in `subject.json`, with account matching and manual player selection that survives restarts.
+- Validate the declared match ID against the Replay's internal `CDemoFileInfo` match ID and return structured mismatch details.
+- Resolve Patch provenance as confirmed, time-inferred, boundary-ambiguous, or unknown before building Patch-scoped analysis.
+- Add a two-team player chooser and a compact switch-player command in the match detail header.
+
+### Changed
+
+- Keep manually imported participant Replays fully usable without an OpenDota connection.
+- Disable Patch-dependent map, ability, and negative-scoring gates when Patch provenance is ambiguous or unknown.
+- Align PowerShell and Electron parser version checks with Parser API `1.6.0`.
+
+### Fixed
+
+- Never select the first Replay player when the configured Steam account is absent from the ten-player roster.
+- Preserve existing analysis and the user's source file when an imported Replay has the wrong filename match ID; only parser cache copies are removed.
+- Show whether the displayed Patch was confirmed or inferred instead of presenting an unqualified version label.
+
+## 0.4.4 - 2026-07-25
+
+### Added
+
+- Detect private 8500+ Immortal Draft histories and explain why public APIs return no matches.
+- Import participant-owned `.dem` and `.dem.bz2` files directly into the local parser.
+- Scan a user-selected Replay directory in the Windows client and parse a selected file.
+- Reconstruct private-match result, duration, players, account IDs, heroes, last hits and denies from Replay events.
+
+### Fixed
+
+- Preserve Replay Epilogue metadata during summary projection so private matches can select the account owner.
+- Invalidate an older decompressed DEM when a newer compressed Replay is imported.
+- Keep PowerShell and Electron parser version checks aligned with Parser API `1.5.3`.
+
 ## 0.4.2 - 2026-07-24
 
 ### Added

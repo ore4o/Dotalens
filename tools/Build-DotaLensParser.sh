@@ -33,7 +33,11 @@ fi
 if [[ -n "${DOTA_LENS_MAVEN_GLOBAL_SETTINGS:-}" ]]; then
   MAVEN_SETTINGS_ARGS=(-gs "$DOTA_LENS_MAVEN_GLOBAL_SETTINGS" "${MAVEN_SETTINGS_ARGS[@]}")
 fi
-mvn "${MAVEN_SETTINGS_ARGS[@]}" -f "$ROOT/tools/replay-parser/pom.xml" clean package "$@"
+if [[ ${#MAVEN_SETTINGS_ARGS[@]} -gt 0 ]]; then
+  mvn "${MAVEN_SETTINGS_ARGS[@]}" -f "$ROOT/tools/replay-parser/pom.xml" clean package "$@"
+else
+  mvn -f "$ROOT/tools/replay-parser/pom.xml" clean package "$@"
+fi
 
 JAR="$ROOT/tools/replay-parser/target/stats-0.1.0.jar"
 if [[ ! -f "$JAR" ]]; then
