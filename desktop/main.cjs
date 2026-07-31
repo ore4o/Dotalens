@@ -536,10 +536,51 @@ function createWindow() {
   });
 }
 
-function stopOwnedParser() {
-  if (ownsParser && parserProcess && !parserProcess.killed) parserProcess.kill();
-  parserProcess = null;
-  ownsParser = false;
+function waitForProcessExit(child, timeoutMs) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      child.removeListener("exit", onExit);
+      resolve(false);
+    }, timeoutMs);
+    const onExit = () => {
+      clearTimeout(timeout);
+      resolve(true);
+    };
+    child.once("exit", onExit);
+  });
+}
+
+async function stopOwnedParser() {
+  const child = parserProcess;
+  if (!ownsParser || !child) return true;
+
+  const running = await parserStatus(600);
+  if (running && Number(running.active_jobs || 0) === 0) {
+    await stopStaleParser(running);
+  }
+  if (await waitForProcessExit(child, 2500)) {
+    parserProcess = null;
+    ownsParser = false;
+    return true;
+  }
+
+  console.error(`[desktop] parser ${child.pid} did not stop gracefully; sending SIGTERM`);
+  try { child.kill("SIGTERM"); } catch {}
+  if (await waitForProcessExit(child, 2500)) {
+    parserProcess = null;
+    ownsParser = false;
+    return true;
+  }
+
+  console.error(`[desktop] parser ${child.pid} did not stop after SIGTERM; sending SIGKILL`);
+  try { child.kill("SIGKILL"); } catch {}
+  const stopped = await waitForProcessExit(child, 1500);
+  if (stopped) {
+    parserProcess = null;
+    ownsParser = false;
+  }
+  return stopped;
 }
 
 function desktopDistribution() {
@@ -607,5 +648,13 @@ if (!hasSingleInstanceLock) {
   });
 
   app.on("window-all-closed", () => app.quit());
-  app.on("before-quit", stopOwnedParser);
+  let finishingQuit = false;
+  app.on("before-quit", (event) => {
+    if (finishingQuit || !ownsParser || !parserProcess) return;
+    event.preventDefault();
+    finishingQuit = true;
+    stopOwnedParser().catch((error) => {
+      console.error("[desktop] parser shutdown failed", error);
+    }).finally(() => app.quit());
+  });
 }
