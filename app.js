@@ -7707,6 +7707,7 @@ function setSettingsPanel(panelName) {
 function updateDistributionLabel(distribution) {
   return ({
     nsis: "Windows 安装版",
+    mac: "macOS 安装版",
     portable: "Windows 便携版",
     development: "开发预览",
   })[distribution] || "当前客户端";
@@ -7749,7 +7750,9 @@ function renderUpdateCenter() {
   check.classList.toggle("is-spinning", viewModel.status === "checking");
   download.classList.toggle("hidden", !viewModel.actions.download.visible);
   download.disabled = viewModel.actions.download.disabled;
-  download.querySelector("span").textContent = viewModel.status === "downloading" ? "正在下载" : "下载更新";
+  download.querySelector("span").textContent = viewModel.distribution === "mac"
+    ? "在浏览器下载"
+    : viewModel.status === "downloading" ? "正在下载" : "下载更新";
   install.classList.toggle("hidden", !viewModel.actions.install.visible);
   install.disabled = viewModel.actions.install.disabled;
   install.querySelector("span").textContent = viewModel.status === "waiting_for_parser"
@@ -7832,6 +7835,8 @@ async function runUpdateAction(action) {
       showToast("Replay 仍在解析", "解析完成或取消任务后，再点击安装", "hourglass");
     } else if (result?.reason === "portable") {
       showToast("便携版暂不自动安装", "请下载新版便携包后手动替换", "file-archive");
+    } else if (result?.reason === "opened_browser") {
+      showToast("已打开新版下载", "下载完成后退出 Dota Lens，并将新版拖入“应用程序”替换旧版", "download");
     } else if (result?.ok === false && result.reason !== "busy") {
       showToast("更新操作未完成", "可以稍后重新检查", "circle-alert");
     }

@@ -70,13 +70,16 @@ function copyState(state) {
 
 function createUpdateController(options = {}) {
   const updater = options.updater || null;
+  const manualUpdater = options.manualUpdater || null;
   const isPackaged = options.isPackaged === true;
   const distribution = options.distribution || (isPackaged ? "nsis" : "development");
   const publishState = typeof options.publishState === "function" ? options.publishState : () => {};
   const isParserBusy = typeof options.isParserBusy === "function" ? options.isParserBusy : async () => false;
   const stopParser = typeof options.stopParser === "function" ? options.stopParser : async () => {};
   const schedule = typeof options.schedule === "function" ? options.schedule : setTimeout;
-  const supported = isPackaged && distribution === "nsis" && updater;
+  const nativeSupported = isPackaged && distribution === "nsis" && updater;
+  const manualSupported = isPackaged && distribution === "mac" && manualUpdater;
+  const supported = nativeSupported || manualSupported;
   const state = {
     status: !isPackaged ? "development" : distribution === "portable" ? "portable" : supported ? "idle" : "unsupported",
     currentVersion: String(options.currentVersion || "0.0.0"),
@@ -171,7 +174,17 @@ function createUpdateController(options = {}) {
       errorMessage: null,
     });
     try {
-      await updater.checkForUpdates();
+      if (manualSupported) {
+        const info = await manualUpdater.check();
+        publish({
+          status: info.available ? "available" : "up_to_date",
+          ...releasePatch(info),
+          latestVersion: info.version ? String(info.version) : state.currentVersion,
+          progress: null,
+        });
+      } else {
+        await updater.checkForUpdates();
+      }
       return { ok: true };
     } catch (error) {
       const safe = safeError(error);
@@ -183,6 +196,16 @@ function createUpdateController(options = {}) {
   async function download() {
     if (!supported) return { ok: false, reason: state.status };
     if (state.status !== "available") return { ok: false, reason: "not_available" };
+    if (manualSupported) {
+      try {
+        await manualUpdater.download();
+        return { ok: true, reason: "opened_browser" };
+      } catch (error) {
+        const safe = safeError(error);
+        publish({ status: "error", errorCode: safe.code, errorMessage: safe.message });
+        return { ok: false, reason: safe.code };
+      }
+    }
     publish({
       status: "downloading",
       progress: 0,

@@ -70,6 +70,15 @@ npm run runtime:build:mac
 npm run desktop:dist:mac
 ```
 
+### macOS 更新
+
+macOS 安装版会在“设置 → 更新”中检查本 Fork 的 GitHub Release。发现新版后，点击
+“在浏览器下载”会打开对应的 Apple Silicon DMG 下载页；下载完成后退出 Dota Lens，
+把新的 `Dota Lens.app` 拖入“应用程序”并替换旧版本即可。
+
+当前安装包未使用 Apple Developer ID 签名和公证，因此不采用 macOS 的静默下载与自动
+替换机制；首次打开仍可能需要按 macOS 的安全提示手动确认。
+
 产物位于 `release/`，包含 `.dmg` 与 `.zip`。构建会进行临时代码签名以保证应用包完整性，但未使用 Apple Developer ID 签名或公证；首次打开仍可能被 Gatekeeper 拦截。应仅运行自行构建或可信来源的包。开发运行可使用：
 
 ```bash

@@ -104,13 +104,16 @@ export function createPreviewUpdateState(status = "available", currentVersion = 
 export function createUpdateViewModel(input = {}) {
   const status = UPDATE_STATUS_META[input.status] ? input.status : "idle";
   const meta = UPDATE_STATUS_META[status];
+  const macManualDownload = input.distribution === "mac" && status === "available";
   const progressValue = boundedProgress(input.progress);
   const latestVersion = input.latestVersion || null;
   const releaseNotes = typeof input.releaseNotes === "string" ? input.releaseNotes.slice(0, 4000) : "";
   return {
     status,
     title: meta.title,
-    detail: input.errorMessage || meta.detail,
+    detail: input.errorMessage || (macManualDownload
+      ? "新版将通过浏览器下载；下载后请将 App 拖入“应用程序”替换旧版。"
+      : meta.detail),
     tone: meta.tone,
     icon: meta.icon,
     currentVersion: String(input.currentVersion || "0.0.0"),

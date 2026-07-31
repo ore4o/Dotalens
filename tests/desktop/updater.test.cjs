@@ -140,6 +140,34 @@ test("development and portable builds never call the NSIS updater", async () => 
   assert.equal(portable.getState().status, "portable");
 });
 
+test("macOS checks GitHub release details and opens the selected installer in a browser", async () => {
+  let downloads = 0;
+  const controller = createUpdateController({
+    currentVersion: "0.5.1",
+    isPackaged: true,
+    distribution: "mac",
+    manualUpdater: {
+      async check() {
+        return {
+          available: true,
+          version: "0.5.2",
+          releaseName: "Dota Lens 0.5.2",
+          releaseNotes: "macOS 下载测试",
+          releaseDate: "2026-07-31T00:00:00Z",
+        };
+      },
+      async download() { downloads += 1; },
+    },
+  });
+
+  assert.deepEqual(await controller.check(), { ok: true });
+  assert.equal(controller.getState().status, "available");
+  assert.equal(controller.getState().latestVersion, "0.5.2");
+  assert.deepEqual(await controller.download(), { ok: true, reason: "opened_browser" });
+  assert.equal(downloads, 1);
+  assert.deepEqual(await controller.install(), { ok: false, reason: "not_downloaded" });
+});
+
 test("release notes are converted to bounded plain text", () => {
   assert.equal(normalizeReleaseNotes("<p>修复 <strong>解析</strong></p>"), "修复 解析");
   assert.equal(normalizeReleaseNotes([{ note: "<b>A</b>" }, { note: "B" }]), "A\nB");

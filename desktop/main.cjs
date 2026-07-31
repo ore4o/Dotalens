@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, dialog, ipcMain, protocol, session } = require("electron");
+const { app, BrowserWindow, Menu, dialog, ipcMain, protocol, session, shell } = require("electron");
 const { spawn, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -595,6 +595,56 @@ function publishUpdateState(state) {
   mainWindow.webContents.send("dota-lens:update-state", state);
 }
 
+function comparableVersion(value) {
+  const match = String(value || "").trim().match(/^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/);
+  return match ? match.slice(1, 4).map(Number) : null;
+}
+
+function isNewerVersion(candidate, current) {
+  const left = comparableVersion(candidate);
+  const right = comparableVersion(current);
+  if (!left || !right) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) return left[index] > right[index];
+  }
+  return false;
+}
+
+function createMacManualUpdater(currentVersion) {
+  let downloadUrl = null;
+  return {
+    async check() {
+      const response = await fetch("https://api.github.com/repos/ore4o/Dotalens/releases/latest", {
+        headers: {
+          Accept: "application/vnd.github+json",
+          "User-Agent": "Dota-Lens",
+        },
+      });
+      if (!response.ok) throw new Error(`GitHub release feed returned HTTP ${response.status}`);
+      const release = await response.json();
+      const assets = Array.isArray(release.assets) ? release.assets : [];
+      const asset = assets.find((item) => /-mac-arm64\.dmg$/i.test(String(item?.name || "")))
+        || assets.find((item) => /-mac-arm64\.zip$/i.test(String(item?.name || "")));
+      if (!asset?.browser_download_url || !/^https:\/\/github\.com\//i.test(asset.browser_download_url)) {
+        throw new Error("The latest release does not include a macOS Apple Silicon installer.");
+      }
+      const version = String(release.tag_name || release.name || "").replace(/^v/i, "");
+      downloadUrl = asset.browser_download_url;
+      return {
+        available: isNewerVersion(version, currentVersion),
+        version,
+        releaseName: release.name || `Dota Lens ${version}`,
+        releaseNotes: release.body || "",
+        releaseDate: release.published_at || null,
+      };
+    },
+    async download() {
+      if (!downloadUrl) throw new Error("No macOS release download is available.");
+      await shell.openExternal(downloadUrl);
+    },
+  };
+}
+
 function initializeUpdateController() {
   const distribution = desktopDistribution();
   let nativeUpdater = null;
@@ -614,6 +664,7 @@ function initializeUpdateController() {
     currentVersion: app.getVersion(),
     isPackaged: app.isPackaged,
     distribution,
+    manualUpdater: distribution === "mac" ? createMacManualUpdater(app.getVersion()) : null,
     publishState: publishUpdateState,
     isParserBusy: async () => Number((await parserStatus())?.active_jobs || 0) > 0,
     stopParser: async () => stopOwnedParser(),
