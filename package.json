@@ -23,6 +23,7 @@
     "test:tools": "node --test \"tests/tools/*.test.js\"",
     "test:desktop": "node --test \"tests/desktop/*.test.cjs\"",
     "player-report:validate": "node tools/player-report-regression.mjs validate-analysis",
+    "player-report:run": "node tools/invoke-player-report-regression.mjs",
     "preview": "vite preview --host 127.0.0.1",
     "desktop:dev": "npm run build && electron .",
     "desktop:dir": "npm run desktop:dir:win",

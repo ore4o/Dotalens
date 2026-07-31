@@ -1,5 +1,17 @@
 # Player Report Replay Regression
 
+## Node runner
+
+The Node runner has no PowerShell dependency and accepts the same three modes:
+
+```bash
+npm run player-report:run -- --mode ValidateExisting
+```
+
+Use `--mode ReparseChanged` or `--mode ReparseAll` to contact the local parser.
+Optional filters are `--include-candidates`, `--selected-match-id <id>`, and
+`--max-matches <count>`.
+
 `manifest.json` freezes the player-report Replay matrix. It contains 16 unique
 Replay candidates with repository-relative paths: 15 enabled matches and one
 reserve. Every enabled match binds one reviewed Golden subject, with positions
