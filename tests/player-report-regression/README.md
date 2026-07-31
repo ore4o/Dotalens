@@ -1,5 +1,12 @@
 # Player Report Replay Regression
 
+## macOS prerequisites
+
+The orchestration runner is PowerShell 7+ and runs on macOS as well as Windows.
+Install it on Apple Silicon macOS with `brew install powershell`, then make sure
+`pwsh --version` reports 7 or newer. Reparse modes also require JDK 21; the
+runner uses `DOTA_LENS_JAVA_HOME`, then `JAVA_HOME`, then macOS `java_home -v 21`.
+
 `manifest.json` freezes the player-report Replay matrix. It contains 16 unique
 Replay candidates with repository-relative paths: 15 enabled matches and one
 reserve. Every enabled match binds one reviewed Golden subject, with positions

@@ -5,7 +5,7 @@ param(
 
     [string]$ManifestPath = (
         Join-Path (Split-Path -Parent $PSScriptRoot) `
-            'tests\player-report-regression\manifest.json'
+            'tests/player-report-regression/manifest.json'
     ),
 
     [int]$TimeoutSeconds = 1200,
@@ -37,7 +37,8 @@ $projectRoot = if ([string]::IsNullOrWhiteSpace($env:PLAYER_REPORT_REGRESSION_PR
 } else {
     [IO.Path]::GetFullPath($env:PLAYER_REPORT_REGRESSION_PROJECT_ROOT)
 }
-$runtimeRoot = Join-Path $projectRoot 'tools\runtime\player-report-regression'
+$toolsRoot = Join-Path $projectRoot 'tools'
+$runtimeRoot = Join-Path (Join-Path $toolsRoot 'runtime') 'player-report-regression'
 $checkpointDirectory = Join-Path $runtimeRoot 'checkpoints'
 $runsDirectory = Join-Path $runtimeRoot 'runs'
 $apiBase = if ([string]::IsNullOrWhiteSpace($env:PLAYER_REPORT_REGRESSION_API_BASE)) {
@@ -45,9 +46,25 @@ $apiBase = if ([string]::IsNullOrWhiteSpace($env:PLAYER_REPORT_REGRESSION_API_BA
 } else {
     $env:PLAYER_REPORT_REGRESSION_API_BASE.TrimEnd('/')
 }
-$parserDataDirectory = Join-Path $projectRoot 'tools\runtime\dota-lens-data'
-$java = Join-Path $PSScriptRoot 'runtime\jdk-21\bin\java.exe'
-$jar = Join-Path $PSScriptRoot 'replay-parser\target\stats-0.1.0.jar'
+$parserDataDirectory = Join-Path (Join-Path $toolsRoot 'runtime') 'dota-lens-data'
+$bundledJava = Join-Path (Join-Path (Join-Path (Join-Path $toolsRoot 'runtime') 'jdk-21') 'bin') $(if ($IsWindows) { 'java.exe' } else { 'java' })
+$java = if ($IsWindows) {
+    $bundledJava
+} elseif (-not [string]::IsNullOrWhiteSpace($env:DOTA_LENS_JAVA_HOME)) {
+    Join-Path $env:DOTA_LENS_JAVA_HOME 'bin/java'
+} elseif (-not [string]::IsNullOrWhiteSpace($env:JAVA_HOME)) {
+    Join-Path $env:JAVA_HOME 'bin/java'
+} elseif (Test-Path -LiteralPath '/usr/libexec/java_home') {
+    $javaHome = (& /usr/libexec/java_home -v 21 2>$null)
+    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($javaHome)) {
+        Join-Path $javaHome.Trim() 'bin/java'
+    } else {
+        $bundledJava
+    }
+} else {
+    $bundledJava
+}
+$jar = Join-Path (Join-Path (Join-Path $toolsRoot 'replay-parser') 'target') 'stats-0.1.0.jar'
 $baseComponentModel = 'player-report-base-components/1.0'
 $parserLifecycle = [pscustomobject]@{
     process = $null
@@ -162,12 +179,15 @@ function Ensure-ParserReady {
     New-Item -ItemType Directory -Force -Path $parserLogs | Out-Null
     if (-not [string]::IsNullOrWhiteSpace($testParserLaunchScript)) {
         $node = Get-Command node -ErrorAction Stop
-        $parserLifecycle.process = Start-Process -FilePath $node.Source `
-            -ArgumentList @($testParserLaunchScript) `
-            -PassThru `
-            -WindowStyle Hidden `
-            -RedirectStandardOutput (Join-Path $parserLogs 'parser.stdout.log') `
-            -RedirectStandardError (Join-Path $parserLogs 'parser.stderr.log')
+        $startOptions = @{
+            FilePath = $node.Source
+            ArgumentList = @($testParserLaunchScript)
+            PassThru = $true
+            RedirectStandardOutput = (Join-Path $parserLogs 'parser.stdout.log')
+            RedirectStandardError = (Join-Path $parserLogs 'parser.stderr.log')
+        }
+        if ($IsWindows) { $startOptions.WindowStyle = 'Hidden' }
+        $parserLifecycle.process = Start-Process @startOptions
         $parserLifecycle.owns = $true
     } else {
         if (-not (Test-Path -LiteralPath $java -PathType Leaf)) {
@@ -183,14 +203,17 @@ function Ensure-ParserReady {
         $previousPython = $env:DOTA_LENS_PYTHON
         try {
             $env:DOTA_LENS_DATA_DIR = $parserDataDirectory
-            $python = Get-Command python -ErrorAction SilentlyContinue
+            $python = Get-Command $(if ($IsWindows) { 'python' } else { 'python3' }) -ErrorAction SilentlyContinue
             $env:DOTA_LENS_PYTHON = if ($python) { $python.Source } else { $null }
-            $parserLifecycle.process = Start-Process -FilePath $java `
-                -ArgumentList @('-Xmx2g', '-jar', $jar) `
-                -PassThru `
-                -WindowStyle Hidden `
-                -RedirectStandardOutput (Join-Path $parserLogs 'parser.stdout.log') `
-                -RedirectStandardError (Join-Path $parserLogs 'parser.stderr.log')
+            $startOptions = @{
+                FilePath = $java
+                ArgumentList = @('-Xmx2g', '-jar', $jar)
+                PassThru = $true
+                RedirectStandardOutput = (Join-Path $parserLogs 'parser.stdout.log')
+                RedirectStandardError = (Join-Path $parserLogs 'parser.stderr.log')
+            }
+            if ($IsWindows) { $startOptions.WindowStyle = 'Hidden' }
+            $parserLifecycle.process = Start-Process @startOptions
             $parserLifecycle.owns = $true
         } finally {
             $env:DOTA_LENS_DATA_DIR = $previousDataDirectory
@@ -222,7 +245,7 @@ function Ensure-ParserReady {
 function Test-AnalysisPackage {
     param([Parameter(Mandatory)][string]$MatchId)
 
-    $analysisDirectory = Join-Path $parserDataDirectory "analyses\$MatchId"
+    $analysisDirectory = Join-Path (Join-Path $parserDataDirectory 'analyses') $MatchId
     $summaryPath = Join-Path $analysisDirectory 'summary.json'
     if (-not (Test-Path -LiteralPath $summaryPath -PathType Leaf)) {
         return $false
@@ -231,7 +254,7 @@ function Test-AnalysisPackage {
         $summary = Read-JsonFile -Path $summaryPath
         $moduleBase = [string]$summary.analysis_storage.module_base
         return -not [string]::IsNullOrWhiteSpace($moduleBase) `
-            -and (Test-Path -LiteralPath (Join-Path $analysisDirectory "$moduleBase\players.json.gz") -PathType Leaf)
+            -and (Test-Path -LiteralPath (Join-Path (Join-Path $analysisDirectory $moduleBase) 'players.json.gz') -PathType Leaf)
     } catch {
         return $false
     }
@@ -316,7 +339,7 @@ function Invoke-ReplayParse {
     $compressed = $fileName.EndsWith('.bz2', [StringComparison]::OrdinalIgnoreCase)
     $extension = if ($compressed) { '.dem.bz2' } else { '.dem' }
     $cachedReplay = [IO.Path]::GetFullPath((
-        Join-Path $parserDataDirectory "replays\$MatchId$extension"
+        Join-Path (Join-Path $parserDataDirectory 'replays') "$MatchId$extension"
     ))
     $headers = @{
         'X-Dota-Lens-File-Name' = $fileName
