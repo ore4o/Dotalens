@@ -7,15 +7,26 @@
 面向 Dota 2 玩家的一体化本地 Replay 复盘工具。本 Fork 当前可构建的代码基线为
 `v0.5.1`，并提供 Apple Silicon macOS 客户端适配；分析结论用于辅助复盘，不应视为绝对的游戏判断。
 
-[下载 Windows x64 安装包（上游 v0.5.6）](https://github.com/Kerry-yangg/Dotalens/releases/download/v0.5.6/Dota-Lens-Setup-0.5.6-x64.exe) · [下载 macOS Apple Silicon 安装包（本 Fork）](https://github.com/ore4o/Dotalens/releases/latest)
+[下载 Windows x64 安装包（上游）](https://github.com/Kerry-yangg/Dotalens/releases/latest) · [下载 macOS Apple Silicon 安装包（本 Fork）](https://github.com/ore4o/Dotalens/releases/latest)
 
 Dota Lens 可以通过 Dota 2 游戏数字 ID 读取公开比赛，也支持手动导入本地 Replay。录像会在本机解析，并生成对线、发育、团战、视野、出装和逐玩家报告。
 
-## 上游 v0.5.6 发布说明
+## 上游发布与源码同步状态
 
-上游最新公开 Release 是 `v0.5.6`，重点包括团战回放页面、高分样本阶段对照，以及 Replay / Patch 对照稳定性修复。
+截至 2026-10-28，上游最新 Windows Release 是 [v0.6.1](https://github.com/Kerry-yangg/Dotalens/releases/tag/v0.6.1)。本 Fork 已同步上游公开主分支的全部提交，包括 CHANGELOG 和 [v0.5.9 发布说明](docs/releases/v0.5.9.md)。
 
-**注意：** 上游在 `v0.5.6` 的 README 中明确说明该 Release 未附带对应新版源代码。因此这些功能目前不能合并到本 Fork；本 Fork 仍以已公开的 `v0.5.1` 源码为基线。可查看[上游 v0.5.6 更新说明](https://github.com/Kerry-yangg/Dotalens/releases/tag/v0.5.6)。
+**注意：** 上游新版核心源码未公开，最近公开的提交仅包含发布文档。因此以下新版功能为上游 Windows 安装版的说明，不代表本 Fork 的 macOS 客户端已具备这些功能；本 Fork 可构建的代码基线仍为 `v0.5.1`。
+
+### 上游 v0.5.9 重点更新
+
+- **本机报告更容易打开**：比赛页、Replay 列表和已完成任务可直接打开保存的报告，无需先连接账号；首次使用提供游戏 ID、导入录像和本机报告三个入口。
+- **本局总结优先**：打开比赛先看本局总结，再按需进入深度分析和分析思路；从结果回查前序交战、死亡状态和对应证据。
+- **团战与开团前视野**：整场个人团战报告结合十人生命、魔法和状态；可切换天辉、夜魇、上帝视角，并定位开团前 10 秒、前 5 秒或交战开始。
+- **证据往返更稳定**：查看片段后返回报告可保留页签、筛选和阅读位置；修复首次跳转被异步加载重置及播放过程中地图、时间条跳动的问题。
+- **结论与数字更清楚**：简明模式优先显示游戏事实；本路结果与个人执行分开呈现，统一跨局统计口径、单位和缺失数据说明。
+- **分享与失败恢复**：补齐报告读取重试入口，修复 PNG 导出和 HTML 分享中英雄图片缺失。
+
+上游该安装版的客户端版本为 `0.5.9`，内置 Parser API 为 `1.16.0`。完整说明见 [v0.5.9 Release](https://github.com/Kerry-yangg/Dotalens/releases/tag/v0.5.9)。
 
 ## 主要功能
 
@@ -33,7 +44,7 @@ Dota Lens 可以通过 Dota 2 游戏数字 ID 读取公开比赛，也支持手�
 
 Windows 10/11 x64 用户可使用上游提供的安装程序：
 
-1. 下载 [`Dota-Lens-Setup-0.5.6-x64.exe`](https://github.com/Kerry-yangg/Dotalens/releases/download/v0.5.6/Dota-Lens-Setup-0.5.6-x64.exe)。
+1. 从[上游最新 Release](https://github.com/Kerry-yangg/Dotalens/releases/latest) 下载 Windows x64 安装包，并参照同一发布页的 `SHA256SUMS.txt` 核对校验值。
 2. 运行安装程序并选择安装目录。
 3. 启动 Dota Lens，输入 Dota 2 个人资料中显示的游戏数字 ID。
 4. 从比赛列表选择一场比赛，确认后等待本地解析完成。
